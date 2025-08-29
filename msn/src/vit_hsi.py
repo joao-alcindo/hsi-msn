@@ -172,12 +172,20 @@ class VisionTransformerHSI(nn.Module):
 
     def initialize_weights(self):
         # rand positional embedding
-        rand_pos_embed = get_3d_sincos_pos_embed(self.embed_dim, self.rand_size[0], self.rand_size[1], cls_token=True)
+        rand_pos_embed = get_3d_sincos_pos_embed(self.embed_dim,
+                                                 self.rand_size[2] ,
+                                                 self.rand_size[0], 
+                                                 self.rand_size[1], 
+                                                 cls_token=True)
         self.rand_pos_embed.data.copy_(rand_pos_embed)
         self.rand_pos_embed.requires_grad = False
 
         # focal positional embedding
-        focal_pos_embed = get_3d_sincos_pos_embed(self.embed_dim, self.focal_size[0], self.focal_size[1], cls_token=True)
+        focal_pos_embed = get_3d_sincos_pos_embed(self.embed_dim,
+                                                   self.focal_size[2],
+                                                   self.focal_size[0], 
+                                                   self.focal_size[1], 
+                                                   cls_token=True)
         self.foc_pos_embed.data.copy_(focal_pos_embed)
         self.foc_pos_embed.requires_grad = False
 

@@ -15,9 +15,9 @@ class SpectralJitter(object):
         self.intensity = intensity
 
     def __call__(self, sample: torch.Tensor):
-        # sample shape: (bands, height, width)
-        add = torch.rand(sample.shape[0], device=sample.device) * self.intensity
-        mul = torch.rand(sample.shape[0], device=sample.device) * self.intensity + 1.0
+        device = sample.device
+        add = torch.rand(sample.shape[0], device=device) * self.intensity
+        mul = torch.rand(sample.shape[0], device=device) * self.intensity + 1.0
 
         sample = sample * mul[:, None, None] + add[:, None, None]
         return sample
