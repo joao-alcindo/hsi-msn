@@ -41,4 +41,5 @@ trunc_init: True
 num_prototipos: 512
 tamanho_embedding: 768 # Deve ser igual a embed_dim
 mask_ratio: 0.1 # Porcentagem de patches mascarados para as visões âncora
-num_anchor_views: 2 # Número de visões âncora (e.g., uma aleatória e uma focal)
+num_rand_views: 2 # Número de visões âncora (e.g., uma aleatória e uma focal)
+num_focal_views: 1 # Parâmetro adicionado para consistência com o train.py

@@ -132,9 +132,7 @@ class HyperspectralImageFolder(torch.utils.data.Dataset):
             data = np.load(path)
             # Converte o array NumPy para um tensor PyTorch.
             img = torch.from_numpy(data.astype(np.float32))
-            
-            # Normalização simples (adapte se precisar de outra)
-            img /= img.max()
+
             
             timg = self.transform(img)
             return timg

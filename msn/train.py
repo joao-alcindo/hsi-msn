@@ -123,8 +123,8 @@ def main(config_path):
             views = [v.to(device) for v in views]
 
             target_view = views[0]
-            focal_views_list = views[1:1 + config.num_focal_views]
-            rand_views_list = views[1 + config.num_focal_views:]
+            focal_views_list = views[1:1 + config.num_rand_views]
+            rand_views_list = views[1 + config.num_rand_views:]
             
             # Concatena as visualizações âncora para o forward pass
             all_anchor_views = focal_views_list + rand_views_list
