@@ -123,12 +123,9 @@ def main(config_path):
             views = [v.to(device) for v in views]
 
             target_view = views[0]
-            focal_views_list = views[1:1 + config.num_rand_views]
-            rand_views_list = views[1 + config.num_rand_views:]
+            focal_views_list = views[1:1 + config.rand_views]
+            rand_views_list = views[1 + config.rand_views:]
             
-            # Concatena as visualizações âncora para o forward pass
-            all_anchor_views = focal_views_list + rand_views_list
-
             batch_size = target_view.size(0)
             
             optimizer.zero_grad()
@@ -144,7 +141,7 @@ def main(config_path):
                 anchor_representations=anchor_representations,
                 target_representation=target_representation,
                 prototypes=prototypes_weights,
-                num_anchor_views=len(all_anchor_views),
+                num_anchor_views= config.rand_views + config.focal_views,
                 use_sinkhorn=config.use_sinkhorn,
                 temp_anchor=config.temp_anchor,
                 temp_target=config.temp_target,

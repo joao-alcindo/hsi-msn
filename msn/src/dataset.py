@@ -152,7 +152,7 @@ def init_data(params):
     Função de inicialização principal. Cria o dataset e o DataLoader.
     """
     transform = make_transforms(params)
-    dataset = HyperspectralImageFolder(root=params['image_folder'], transform=transform)
+    dataset = HyperspectralImageFolder(root=params['data_root'], transform=transform)
 
     data_loader = torch.utils.data.DataLoader(
         dataset,
