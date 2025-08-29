@@ -16,10 +16,11 @@ import csv
 # Adiciona o diretório 'src' ao PYTHONPATH
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), 'src')))
 
-# Importa as classes e funções necessárias dos módulos
-from msn.src.hsi_msn import MSNModel
+# IMPORTAÇÕES CORRIGIDAS
+# A classe do dataset agora é a que você definiu em src/dataset.py
+from src.hsi_msn import MSNModel
 from src.loss import msn_loss
-from src.dataset import MultiModalDataset_normalized as MultiModalDataset
+from src.dataset import init_data  # Importa a função de inicialização
 from src.utils import AverageMeter, WarmupCosineSchedule, CosineWDSchedule
 
 # --- Configurações Globais ---
@@ -36,6 +37,10 @@ def main(config_path):
         config_dict = yaml.safe_load(f)
     config = SimpleNamespace(**config_dict)
 
+    # Verifica se os tamanhos das views e dos patches são válidos
+    assert all(d % p == 0 for d, p in zip(config.rand_size, config.patch_size)), "rand_size must be divisible by patch_size"
+    assert all(d % p == 0 for d, p in zip(config.focal_size, config.patch_size)), "focal_size must be divisible by patch_size"
+
     run_name = f"proto{config.num_prototipos}_embed{config.tamanho_embedding}"
     output_dir = os.path.join(config.output_dir, run_name)
     
@@ -50,7 +55,6 @@ def main(config_path):
     logger.info(f"Configuração salva em: {config_output_path}")
 
     log_file_path = os.path.join(output_dir, 'training_log.csv')
-    # MODIFICADO: Adiciona a nova métrica ao cabeçalho do CSV
     log_header = ['epoch', 'avg_total_loss', 'avg_ce_loss', 'avg_memax_reg', 'lr', 'wd', 'momentum_ema', 'avg_prototypes_used']
     if not os.path.isfile(log_file_path):
         with open(log_file_path, 'w', newline='') as f:
@@ -70,9 +74,10 @@ def main(config_path):
     ]
     optimizer = optim.AdamW(param_groups, lr=config.learning_rate)
 
-    train_dataset = MultiModalDataset(data_root=config.data_root)
-    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=config.batch_size, shuffle=True, num_workers=os.cpu_count(), pin_memory=True)
-
+    # CARREGAMENTO DE DADOS CORRIGIDO
+    # Usa a função init_data para obter o DataLoader
+    train_loader = init_data(config_dict)
+    
     # --- 3. Schedulers e Variáveis de Estado ---
     steps_per_epoch = len(train_loader)
     total_training_steps = config.num_epochs * steps_per_epoch
@@ -104,38 +109,47 @@ def main(config_path):
     momentum_scheduler_iter = (momentum_start + (momentum_increment_per_step * i) for i in range(global_step, total_training_steps + 1))
 
     loss_meter = AverageMeter(); ce_loss_meter = AverageMeter(); memax_reg_meter = AverageMeter()
-    # NOVO: Medidor para a média de protótipos usados
     proto_used_meter = AverageMeter()
 
     # --- 6. Loop Principal de Treinamento ---
     logger.info("Iniciando o ciclo de treinamento...")
     for epoch in range(start_epoch, config.num_epochs):
         loss_meter.reset(); ce_loss_meter.reset(); memax_reg_meter.reset()
-        # NOVO: Reseta o medidor de protótipos
         proto_used_meter.reset()
         model.train()
 
-        for batch_idx, (prisma_data, sentinel2_data, airbone_hyper_data, _) in enumerate(train_loader):
-            batch_size = prisma_data.size(0)
-            prisma_data, sentinel2_data, airbone_hyper_data = prisma_data.to(device), sentinel2_data.to(device), airbone_hyper_data.to(device)
+        for batch_idx, views in enumerate(train_loader):
+            # O dataloader retorna uma lista de tensores: [target_view, focal_view_1, ..., focal_view_N, rand_view_1, ..., rand_view_M]
+            views = [v.to(device) for v in views]
+
+            target_view = views[0]
+            focal_views_list = views[1:1 + config.num_focal_views]
+            rand_views_list = views[1 + config.num_focal_views:]
+            
+            # Concatena as visualizações âncora para o forward pass
+            all_anchor_views = focal_views_list + rand_views_list
+
+            batch_size = target_view.size(0)
+            
             optimizer.zero_grad()
 
-            # z_prisma_student, z_sentinel2_student, z_airbone_hyper_target, prototypes_weights = model(prisma_data, sentinel2_data, airbone_hyper_data)
-            # anchor_views = torch.cat((z_prisma_student, z_sentinel2_student), dim=0)
-            # target_views = z_airbone_hyper_target
+            # Passa as listas de views separadamente para o modelo
+            anchor_representations, target_representation, prototypes_weights = model(
+                focal_views_list=focal_views_list,
+                rand_views_list=rand_views_list,
+                target_view=target_view
+            )
 
-            anchor_views, target_views, prototypes_weights = model(prisma_data, sentinel2_data, airbone_hyper_data)
-
-
-
-            total_loss, cross_entropy_loss, me_max_reg, _, log_dct = msn_loss(anchor_representations=anchor_views, 
-                                                                              target_representation=target_views, 
-                                                                              prototypes=prototypes_weights, 
-                                                                              num_anchor_views=config.num_anchor_views, 
-                                                                              use_sinkhorn=config.use_sinkhorn, 
-                                                                              temp_anchor=config.temp_anchor, 
-                                                                              temp_target=config.temp_target, 
-                                                                              lambda_reg=config.lambda_reg)
+            total_loss, cross_entropy_loss, me_max_reg, _, log_dct = msn_loss(
+                anchor_representations=anchor_representations,
+                target_representation=target_representation,
+                prototypes=prototypes_weights,
+                num_anchor_views=len(all_anchor_views),
+                use_sinkhorn=config.use_sinkhorn,
+                temp_anchor=config.temp_anchor,
+                temp_target=config.temp_target,
+                lambda_reg=config.lambda_reg
+            )
             total_loss.backward()
             current_lrs, current_wds = scheduler_lr.get_last_lr(), scheduler_wd.get_last_lr()
             for i, param_group in enumerate(optimizer.param_groups):
@@ -151,14 +165,12 @@ def main(config_path):
             loss_meter.update(total_loss.item(), n=batch_size)
             ce_loss_meter.update(cross_entropy_loss.item(), n=batch_size)
             memax_reg_meter.update(me_max_reg.item(), n=batch_size)
-            # NOVO: Atualiza o medidor com o número de protótipos usados neste lote
             proto_used_meter.update(log_dct['np'])
 
         # --- 7. Tarefas de Final de Época ---
         current_lr = optimizer.param_groups[0]['lr']
         current_wd = optimizer.param_groups[0]['weight_decay']
         
-        # MODIFICADO: Log no terminal agora inclui a contagem de protótipos
         logger.info(
             f"Epoch [{epoch+1}/{config.num_epochs}] - "
             f"Avg Total Loss: {loss_meter.avg:.4f}, "
@@ -167,15 +179,13 @@ def main(config_path):
             f"LR: {current_lr:.2e}, "
             f"WD: {current_wd:.2e}, "
             f"Momentum EMA: {current_momentum:.4f}, "
-            f"Prototypes Used: {proto_used_meter.avg:.1f}/{config.num_prototipos}" # Mostra a média de protótipos usados
+            f"Prototypes Used: {proto_used_meter.avg:.1f}/{config.num_prototipos}"
         )
         
         # stop training prototypes after config.epoch_stop_prototype
-        if epoch >= config.epoch_stop_prototype:   
+        if epoch >= config.epoch_stop_prototype:    
             model.prototypes.requires_grad = False
 
-
-        # MODIFICADO: Salva a nova métrica no arquivo CSV
         with open(log_file_path, 'a', newline='') as f:
             writer = csv.writer(f)
             writer.writerow([epoch + 1, loss_meter.avg, ce_loss_meter.avg, memax_reg_meter.avg, current_lr, current_wd, current_momentum, proto_used_meter.avg])
