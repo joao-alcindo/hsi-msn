@@ -15,7 +15,9 @@ class MSNModel(nn.Module):
 
 
 
-        self.student_encoder = VisionTransformerHSI(patch_size= config.patch_size, 
+        self.student_encoder = VisionTransformerHSI(rand_size= config.rand_size,
+                                                    focal_size= config.focal_size,
+                                                    patch_size= config.patch_size, 
                                                     in_chans= config.in_chans, 
                                                     embed_dim= config.embed_dim, 
                                                     depth= config.depth,
@@ -30,8 +32,8 @@ class MSNModel(nn.Module):
         
         #-- target encoder 
         self.target_encoder = copy.deepcopy(self.student_encoder)
-        # change the mask ratio of target encoder to 0.0
-        self.target_encoder.mask_ratio = 0.0
+
+        self.mask_ratio = config.mask_ratio
 
         # Congela os parâmetros do alvo para que não sejam atualizados por backpropagation
         for param in self.target_encoder.parameters():
@@ -41,17 +43,27 @@ class MSNModel(nn.Module):
         # Os protótipos são uma matriz de pesos treináveis (Embedding, Num_prototipos)
         self.prototypes = nn.Parameter(torch.randn(self.config.embed_dim, self.config.num_prototipos))
 
+        # inicializa os pesos dos protótipos
+        self.initialize_weights_prototypes()
 
+    def initialize_weights_prototypes(self):
+        nn.init.xavier_uniform_(self.prototypes)
 
-    def forward(self, x):
+    
+
+    def forward(self, rand_views, focal_views, x):
         # x: (B, C, T, H, W)
         B = x.shape[0]
-
+        
         # --- Visões do Estudante ---
-        # Obtém múltiplas visões mascaradas da entrada
         anchor_views = []
-        for _ in range(self.config.num_anchor_views):
-            anchor_view = self.student_encoder(x)
+        # rand_views: lista de tensores (B, C, T, H, W)
+        for view in rand_views:
+            anchor_view = self.student_encoder(view, mask_ratio = self.mask_ratio)  # (B, Embedding)
+            anchor_views.append(anchor_view)
+        # focal_views: lista de tensores (B, C, T, H, W)
+        for view in focal_views:
+            anchor_view = self.student_encoder(view, mask_ratio = self.mask_ratio)  # (B, Embedding)
             anchor_views.append(anchor_view)
 
 
@@ -59,7 +71,7 @@ class MSNModel(nn.Module):
 
         # --- Visão do Alvo ---
         with torch.no_grad():
-            target_view = self.target_encoder(x)  # (B, Embedding)
+            target_view = self.target_encoder(x, mask_ratio = 0.0)  # (B, Embedding)
 
 
         return anchor_views, target_view, self.prototypes

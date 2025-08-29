@@ -286,9 +286,9 @@ class VisionTransformerHSI(nn.Module):
         return x_masked, mask, ids_restore, ids_keep
     
 
-    def forward(self, x, mask_ratio = 0.6):
+    def forward(self, x, mask_ratio = 0.0):
         #embed patches
-        x = self.patch_embed(x)  # [B, num_patches, embed_dim]
+        x = self.patch_embed(x) 
         N, T, L, C = x.shape  # T: num_patches_t, L: num_patches_l
 
         x = x.reshape(N, T * L, C)
@@ -300,9 +300,9 @@ class VisionTransformerHSI(nn.Module):
 
 
         if x.shape[1] == self.rand_pos_embed.shape[1]:
-
             pos_embed = self.rand_pos_embed[:, 1:, :].expand(N, -1, -1)
             pos_embed_cls = self.rand_pos_embed[:, :1, :].expand(N, -1, -1)
+
         else:
             pos_embed = self.foc_pos_embed[:, 1:, :].expand(N, -1, -1)  
             pos_embed_cls = self.foc_pos_embed[:, :1, :].expand(N, -1, -1)
