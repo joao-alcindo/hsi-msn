@@ -1,0 +1,52 @@
+alpha_ema: 0.996
+attn_drop_rate: 0.0
+batch_size: 16
+data_root: ./../hsi_airborne/data.npy
+depth: 8
+drop_path_rate: 0.01
+drop_rate: 0.0
+embed_dim: 128
+epoch_stop_prototype: 50
+final_lr: 1.0e-06
+final_weight_decay: 0.05
+focal_crop_scale:
+- 0.5
+- 0.6
+focal_size:
+- 10
+- 10
+- 430
+focal_views: 2
+in_chans: 1
+lambda_reg: 0.01
+learning_rate: 0.0001
+mask_ratio: 0.75
+mlp_ratio: 4.0
+num_epochs: 100
+num_heads: 8
+num_prototipos: 10
+num_workers: 4
+output_dir: ./output/proto10_embed128
+patch_size:
+- 2
+- 2
+- 43
+pin_memory: true
+project_name: hsi-msn
+rand_crop_scale:
+- 0.9
+- 1.0
+rand_size:
+- 20
+- 20
+- 430
+rand_views: 5
+resume_from: null
+save_freq_epochs: 50
+spectral_jitter_strength: 0.1
+temp_anchor: 0.1
+temp_target: 0.025
+trunc_init: true
+use_sinkhorn: true
+warmup_epochs: 10
+weight_decay: 0.05

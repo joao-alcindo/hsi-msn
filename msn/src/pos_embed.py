@@ -37,9 +37,12 @@ def get_3d_sincos_pos_embed(embed_dim, t_size, h_size, w_size, cls_token=False, 
     grid = grid.reshape([2, 1, h_size, w_size])
     pos_embed_spatial = get_2d_sincos_pos_embed_from_grid(embed_dim_spatial, grid)  # (H*W, D/2)
 
+
+
     # Temporal (T)
     grid_t = np.arange(t_size, dtype=np.float32)
     pos_embed_temporal = get_1d_sincos_pos_embed_from_grid(embed_dim_temporal, grid_t, scale=scale_t)  # (T, D/2)
+
 
     # Expand para combinar tempo e espaço
     pos_embed_temporal = pos_embed_temporal[:, np.newaxis, :]           # (T, 1, D/2)
@@ -118,25 +121,26 @@ def get_2d_sincos_pos_embed_from_grid(embed_dim, grid):
     return emb
 
 
-def get_1d_sincos_pos_embed_from_grid(embed_dim, pos):
-    """
-    embed_dim: output dimension for each position
-    pos: a list of positions to be encoded: size (M,)
-    out: (M, D)
-    """
+
+
+
+def get_1d_sincos_pos_embed_from_grid(embed_dim, pos, scale=None):
     assert embed_dim % 2 == 0
     omega = np.arange(embed_dim // 2, dtype=np.float32)
-    omega /= embed_dim / 2.
-    omega = 1. / 10000**omega  # (D/2,)
+    omega /= embed_dim / 2.0
+    omega = 1.0 / 10000 ** omega  # (D/2,)
 
     pos = pos.reshape(-1)  # (M,)
-    out = np.einsum('m,d->md', pos, omega)  # (M, D/2), outer product
+    if scale is not None:
+        pos = pos * scale
+    out = np.einsum("m,d->md", pos, omega)  # (M, D/2), outer product
 
-    emb_sin = np.sin(out) # (M, D/2)
-    emb_cos = np.cos(out) # (M, D/2)
+    emb_sin = np.sin(out)  # (M, D/2)
+    emb_cos = np.cos(out)  # (M, D/2)
 
     emb = np.concatenate([emb_sin, emb_cos], axis=1)  # (M, D)
     return emb
+
 
 
 # --------------------------------------------------------

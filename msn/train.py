@@ -60,6 +60,8 @@ def train_epoch(model, train_loader, optimizer, scheduler_lr, scheduler_wd, mome
             target_view=target_view
         )
 
+        # print(anchor_representations)
+
         # Cálculo da perda
         total_loss, cross_entropy_loss, me_max_reg, _, log_dct = msn_loss(
             anchor_representations=anchor_representations,
@@ -105,7 +107,7 @@ def main(config_path):
     assert all(d % p == 0 for d, p in zip(config.rand_size, config.patch_size)), "rand_size must be divisible by patch_size"
     assert all(d % p == 0 for d, p in zip(config.focal_size, config.patch_size)), "focal_size must be divisible by patch_size"
 
-    run_name = f"proto{config.num_prototipos}_embed{config.tamanho_embedding}"
+    run_name = f"proto{config.num_prototipos}_embed{config.embed_dim}"
     output_dir = os.path.join(config.output_dir, run_name)
     os.makedirs(output_dir, exist_ok=True)
     

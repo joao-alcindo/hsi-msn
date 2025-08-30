@@ -1,0 +1,8 @@
+hsi_airborne.zip
+
+hsi_airborne/data.npy
+hsi_airborne/
+
+msn/src/__pycache__/
+
+msn/output/*/*.csv

@@ -85,7 +85,7 @@ def make_transforms(params):
     Cria as pipelines de transformação para as visualizações aleatórias e focais.
     """
     rand_transform = v2.Compose([
-        v2.RandomResizedCrop(params['rand_size'], scale=params['rand_crop_scale']),
+        v2.RandomResizedCrop(params['rand_size'][:1], scale=params['rand_crop_scale']),
         v2.ToDtype(torch.float32, scale=True),
         SpectralJitter(intensity=params['spectral_jitter_strength']),
         RandomSimetry(),
@@ -93,7 +93,7 @@ def make_transforms(params):
     ])
     
     focal_transform = v2.Compose([
-        v2.RandomResizedCrop(params['focal_size'], scale=params['focal_crop_scale']),
+        v2.RandomResizedCrop(params['focal_size'][:1], scale=params['focal_crop_scale']),
         v2.ToDtype(torch.float32, scale=True),
         SpectralJitter(intensity=params['spectral_jitter_strength']),
         Clip(),
@@ -143,6 +143,34 @@ class HyperspectralImageFolder(torch.utils.data.Dataset):
     def __len__(self):
         return len(self.imgs)
     
+class HyperspectralNPZDataset(torch.utils.data.Dataset):
+    """
+    Carrega todas as imagens hiperespectrais de um único arquivo .npz.
+    """
+    def __init__(self, npz_file, transform):
+        self.transform = transform
+        # Carrega o arquivo .npz inteiro na memória.
+        # Assume que o array de dados está sob a chave 'data'.
+        data_file = np.load(npz_file)
+        self.imgs = data_file
+
+    def __getitem__(self, index):
+        # Acessa a imagem do array já carregado
+        img_np = self.imgs[index]
+        img = torch.from_numpy(img_np.astype(np.float32))
+
+        # replace nan by white noise
+        img = torch.where(torch.isnan(img), 0, img)
+        
+        timg = self.transform(img)
+
+        for i in range(len(timg)):
+            timg[i] = timg[i].unsqueeze(0)
+
+        return timg
+
+    def __len__(self):
+        return len(self.imgs)
 # -----------------
 # 4. Inicialização dos dados
 # -----------------
@@ -152,7 +180,7 @@ def init_data(params):
     Função de inicialização principal. Cria o dataset e o DataLoader.
     """
     transform = make_transforms(params)
-    dataset = HyperspectralImageFolder(root=params['data_root'], transform=transform)
+    dataset = HyperspectralNPZDataset(npz_file=params['data_root'], transform=transform)
 
     data_loader = torch.utils.data.DataLoader(
         dataset,

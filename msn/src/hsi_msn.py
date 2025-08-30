@@ -52,8 +52,6 @@ class MSNModel(nn.Module):
     
 
     def forward(self, rand_views, focal_views, target_view):
-        # x: (B, C, T, H, W)
-        B = x.shape[0]
         
         # --- Visões do Estudante ---
         anchor_views = []
@@ -62,7 +60,7 @@ class MSNModel(nn.Module):
         for view in rand_views:
             anchor_view = self.student_encoder(view, mask_ratio = self.mask_ratio)  # (B, Embedding)
             anchor_views.append(anchor_view)
-            
+
         # focal_views: lista de tensores (B, C, T, H, W)
         for view in focal_views:
             anchor_view = self.student_encoder(view, mask_ratio = self.mask_ratio)  # (B, Embedding)

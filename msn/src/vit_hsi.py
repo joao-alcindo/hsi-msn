@@ -10,7 +10,7 @@ import random
 from pos_embed import get_3d_sincos_pos_embed
 
 
-
+# buscar as funcoes
 from timm.models.layers import trunc_normal_, DropPath, Mlp
 from einops import rearrange
 
@@ -47,7 +47,7 @@ class PatchEmbed(nn.Module):
             torch.Tensor: The output tensor of patch embeddings,
                           ready for a Transformer model.
         """
-        B, C, T, H, W = x.shape
+
 
 
         # Apply the 3D convolution to convert HSI patches into embeddings
@@ -79,6 +79,8 @@ class Attention(nn.Module):
 
     def forward(self, x):
         B, N, C = x.shape
+
+
         qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
         q, k, v = qkv.unbind(0)   # make torchscript happy (cannot use tensor as tuple)
 
@@ -125,6 +127,7 @@ class VisionTransformerHSI(nn.Module):
 
         self.rand_size = rand_size
         self.focal_size = focal_size
+        self.patch_size = patch_size
 
         assert rand_size[0] % patch_size[0] == 0 and rand_size[1] % patch_size[1] == 0 and rand_size[2] % patch_size[2] == 0, \
             f"Image dimensions must be divisible by the patch size. Got image size {rand_size} and patch size {patch_size}."
@@ -136,11 +139,11 @@ class VisionTransformerHSI(nn.Module):
                                       in_chans   = in_chans, 
                                       embed_dim  = embed_dim)
         
-        num_rand_patches = rand_size[0] // patch_size[0] * rand_size[1] // patch_size[1] * rand_size[2] // patch_size[2]
+        num_rand_patches = (rand_size[0] // patch_size[0]) * (rand_size[1] // patch_size[1]) * (rand_size[2] // patch_size[2])
         num_focal_patches = focal_size[0] // patch_size[0] * focal_size[1] // patch_size[1] * focal_size[2] // patch_size[2]
 
-        self.rand_pos_embed = nn.Parameter(torch.zeros(1, num_rand_patches, embed_dim))
-        self.foc_pos_embed = nn.Parameter(torch.zeros(1, num_focal_patches, embed_dim))
+        self.rand_pos_embed = nn.Parameter(torch.zeros(1, num_rand_patches + 1, embed_dim))
+        self.foc_pos_embed = nn.Parameter(torch.zeros(1, num_focal_patches+ 1 , embed_dim))
 
         self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
 
@@ -173,18 +176,21 @@ class VisionTransformerHSI(nn.Module):
     def initialize_weights(self):
         # rand positional embedding
         rand_pos_embed = get_3d_sincos_pos_embed(self.embed_dim,
-                                                 self.rand_size[2] ,
-                                                 self.rand_size[0], 
-                                                 self.rand_size[1], 
+                                                 self.rand_size[2] // self.patch_size[2],
+                                                 self.rand_size[0] // self.patch_size[0], 
+                                                 self.rand_size[1] // self.patch_size[1], 
                                                  cls_token=True)
+        print("rand_pos_embed", rand_pos_embed.shape)
+
+
         self.rand_pos_embed.data.copy_(rand_pos_embed)
         self.rand_pos_embed.requires_grad = False
 
         # focal positional embedding
         focal_pos_embed = get_3d_sincos_pos_embed(self.embed_dim,
-                                                   self.focal_size[2],
-                                                   self.focal_size[0], 
-                                                   self.focal_size[1], 
+                                                   self.focal_size[2] // self.patch_size[2],
+                                                   self.focal_size[0] // self.patch_size[0],
+                                                   self.focal_size[1] // self.patch_size[1],
                                                    cls_token=True)
         self.foc_pos_embed.data.copy_(focal_pos_embed)
         self.foc_pos_embed.requires_grad = False
@@ -297,58 +303,81 @@ class VisionTransformerHSI(nn.Module):
     def forward(self, x, mask_ratio = 0.0):
         #embed patches
         x = self.patch_embed(x) 
+        device = x.device
         N, T, L, C = x.shape  # T: num_patches_t, L: num_patches_l
+
 
         x = x.reshape(N, T * L, C)
 
 
+        
         x, mask, ids_restore, ids_keep = self.spatial_spectral_masking(x, T, L, 
                                                                        mask_ratio= mask_ratio)
+
         x = x.view(N, -1, C)
 
 
-        if x.shape[1] == self.rand_pos_embed.shape[1]:
+
+
+        if  (T*L + 1) == self.rand_pos_embed.shape[1]:
             pos_embed = self.rand_pos_embed[:, 1:, :].expand(N, -1, -1)
-            pos_embed_cls = self.rand_pos_embed[:, :1, :].expand(N, -1, -1)
+            pos_embed_cls = self.rand_pos_embed[:, 0:1, :].expand(N, -1, -1)
 
         else:
             pos_embed = self.foc_pos_embed[:, 1:, :].expand(N, -1, -1)  
-            pos_embed_cls = self.foc_pos_embed[:, :1, :].expand(N, -1, -1)
-
+            pos_embed_cls = self.foc_pos_embed[:, 0:1, :].expand(N, -1, -1)
 
 
         # add cls token
-        cls_tokens = self.cls_token.expand(N, -1, -1)
-        cls_tokens = cls_tokens + pos_embed_cls
+        cls_token = self.cls_token.expand(N, -1, -1)
+        cls_token = cls_token + pos_embed_cls
 
-        # add position embedding
-
+        # add pos embedding nos patches
         pos_embed = torch.gather(
-            pos_embed, # Começa do segundo elemento (ignora o do cls_token)
+            pos_embed,
             dim=1, 
             index=ids_keep.unsqueeze(-1).repeat(1, 1, pos_embed.shape[2])
         )
-        x = x.view([N, -1, C] ) + pos_embed
+        x = x + pos_embed
 
-        # concat cls token
-        x = torch.cat((cls_tokens, x), dim=1)
-
-        assert x.shape[1] == self.len_t * self.len_l + 1
-
+        # ---- separa para cada ramo ----
+        # rearrange patches
         x_spatial = rearrange(x, 'b (t l) c -> (b t) l c', t=self.len_t, l=self.len_l)
         x_spectral = rearrange(x, 'b (t l) c -> (b l) t c', t=self.len_t, l=self.len_l)
 
+        # cls_spatial shape [B * L, 1, C]
+        cls_spatial = cls_token.repeat(self.len_t,1 , 1)
+
+        cls_spectral = cls_token.repeat( self.len_l, 1, 1)
+
+        # concatena
+        x_spatial = torch.cat((cls_spatial, x_spatial), dim=1)
+        x_spectral = torch.cat((cls_spectral, x_spectral), dim=1)
+
+
+        # passa pelos blocos
         for blk in self.vit_spatial:
             x_spatial = blk(x_spatial)
-        
+
         for blk in self.vit_spectral:
             x_spectral = blk(x_spectral)
 
-        x_spatial = rearrange(x_spatial, '(b t) l c -> b (t l) c', b=N, t=self.len_t, l=self.len_l)
-        x_spectral = rearrange(x_spectral, '(b l) t c -> b (t l) c', b=N, t=self.len_t, l=self.len_l)
+        # pega apenas o cls_token de cada ramo
+        cls_spatial = x_spatial[:, 0, :]    # (N*T, C)
+        cls_spectral = x_spectral[:, 0, :]  # (N*L, C)
 
-        x = (x_spatial + x_spectral) 
+        # rearrange cls
+        cls_spatial = cls_spatial.view(N, self.len_t, -1)
+        cls_spectral = cls_spectral.view(N, self.len_l, -1)
 
-        x = self.norm(x)
+        cls_finals = torch.cat((cls_spatial, cls_spectral), dim=1)
+        cls_finals = self.norm(cls_finals)
 
-        return x[:, 0, :]  # return cls token representation
+        cls_final = torch.mean(cls_finals, dim=1)
+
+        cls_final = self.norm(cls_final)
+
+
+
+
+        return cls_final
