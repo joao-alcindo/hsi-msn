@@ -56,16 +56,21 @@ class MSNModel(nn.Module):
         # --- Visões do Estudante ---
         anchor_views = []
 
+
+
         # rand_views: lista de tensores (B, C, T, H, W)
         for view in rand_views:
             anchor_view = self.student_encoder(view, mask_ratio = self.mask_ratio)  # (B, Embedding)
             anchor_views.append(anchor_view)
 
+        
         # focal_views: lista de tensores (B, C, T, H, W)
         for view in focal_views:
             anchor_view = self.student_encoder(view, mask_ratio = self.mask_ratio)  # (B, Embedding)
             anchor_views.append(anchor_view)
 
+
+        print(anchor_views[0])
 
         anchor_views = torch.cat(anchor_views, dim=0)  # (B * num_anchor_views, Embedding)
 

@@ -1,2 +1,6 @@
 epoch,avg_total_loss,avg_ce_loss,avg_memax_reg,lr,wd,momentum_ema,avg_prototypes_used
 1,nan,nan,nan,0.05,0.05,0.9881080341880342,1.0
+1,nan,nan,nan,0.05,0.05,0.9881772413793103,1.0
+1,nan,nan,nan,0.05,0.05,0.9881772413793103,1.0
+2,nan,nan,nan,0.05,0.05,0.9802172413793103,1.0
+1,nan,nan,nan,0.05,0.05,0.9881772413793103,1.0

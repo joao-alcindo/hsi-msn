@@ -1,8 +1,8 @@
 alpha_ema: 0.996
 attn_drop_rate: 0.0
-batch_size: 16
+batch_size: 32
 data_root: ./../hsi_airborne/data.npy
-depth: 8
+depth: 4
 drop_path_rate: 0.01
 drop_rate: 0.0
 embed_dim: 128
