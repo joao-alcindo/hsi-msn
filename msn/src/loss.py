@@ -6,7 +6,7 @@ import torch.nn.functional as F
 
 # --- Algoritmo Sinkhorn-Knopp ---
 @torch.no_grad()
-def sinkhorn(logits: torch.Tensor, epsilon: float = 0.05, num_itr: int = 3):
+def sinkhorn(logits: torch.Tensor, epsilon: float = 0.05, num_itr: int = 1):
     """
     Aplica o algoritmo Sinkhorn-Knopp para obter uma matriz de atribuição balanceada.
 
@@ -72,6 +72,7 @@ def msn_loss(
 
     # 2. Calcular predições do alvo (pseudo-labels) - SEM GRADIENTES
     with torch.no_grad():
+        
         target_logits = (target_representation @ prototypes) / temp_target
 
         if use_sinkhorn:

@@ -20,33 +20,33 @@ epoch_stop_prototype: 50 # Epoch em que o treinamento dos protótipos é parado
 use_sinkhorn: True
 temp_anchor: 0.1
 temp_target: 0.025
-lambda_reg: 0.01
+lambda_reg: 0.001
 
 # Parâmetros do modelo (Vision Transformer HSI)
 # Tamanhos das imagens de entrada e patches
 rand_size: [20, 20, 430]
-focal_size: [10, 10, 430]
-patch_size: [2, 2, 43]
+focal_size: [12, 12, 430]
+patch_size: [4, 4, 43]
 in_chans: 1 # Número de canais de entrada (1 para HSI)
 embed_dim: 128 # Tamanho da dimensão do embedding
-depth: 4 # Número de blocos do Transformer
+depth: 1 # Número de blocos do Transformer
 num_heads: 8 # Número de cabeças de atenção
 mlp_ratio: 4.0
-drop_rate: 0.0
-attn_drop_rate: 0.0
+drop_rate: 0.5
+attn_drop_rate: 0.4
 drop_path_rate: 0.01
 trunc_init: True
 
 # Configurações específicas da MSN
-num_prototipos: 10
-mask_ratio: 0.75 # Porcentagem de patches mascarados para as visões âncora
+num_prototipos: 20
+mask_ratio: 0.25 # Porcentagem de patches mascarados para as visões âncora
 rand_views: 5 # Número de visões âncora (e.g., uma aleatória e uma focal)
 focal_views: 2 # Parâmetro adicionado para consistência com o train.py
 
 
 rand_crop_scale: [0.9, 1.0]
 focal_crop_scale: [0.5, 0.6]
-num_workers: 4
+num_workers: 1
 pin_memory: True
 
 spectral_jitter_strength: 0.1    # Intensidade da perturbação espectral

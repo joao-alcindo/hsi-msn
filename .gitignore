@@ -5,4 +5,4 @@ hsi_airborne/
 
 msn/src/__pycache__/
 
-msn/output/*/*.csv
+msn/output/

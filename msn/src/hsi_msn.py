@@ -70,7 +70,7 @@ class MSNModel(nn.Module):
             anchor_views.append(anchor_view)
 
 
-        print(anchor_views[0])
+
 
         anchor_views = torch.cat(anchor_views, dim=0)  # (B * num_anchor_views, Embedding)
 

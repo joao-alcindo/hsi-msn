@@ -84,7 +84,7 @@ class Attention(nn.Module):
         self.q = nn.Linear(dim, dim, bias=qkv_bias)
         self.k = nn.Linear(dim, dim, bias=qkv_bias)
         self.v = nn.Linear(dim, dim, bias=qkv_bias)
-        assert attn_drop == 0.0  # do not use
+       #assert attn_drop == 0.0  # do not use
         self.proj = nn.Linear(dim, dim)
         self.proj_drop = nn.Dropout(proj_drop)
 
@@ -237,8 +237,8 @@ class VisionTransformerHSI(nn.Module):
         num_rand_patches = (rand_size[0] // patch_size[0]) * (rand_size[1] // patch_size[1]) * (rand_size[2] // patch_size[2])
         num_focal_patches = focal_size[0] // patch_size[0] * focal_size[1] // patch_size[1] * focal_size[2] // patch_size[2]
 
-        self.rand_pos_embed = nn.Parameter(torch.zeros(1, num_rand_patches + 1, embed_dim))
-        self.foc_pos_embed = nn.Parameter(torch.zeros(1, num_focal_patches+ 1 , embed_dim))
+        self.rand_pos_embed = nn.Parameter(torch.zeros(1, num_rand_patches , embed_dim))
+        self.foc_pos_embed = nn.Parameter(torch.zeros(1, num_focal_patches, embed_dim))
 
         self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
 
@@ -251,6 +251,8 @@ class VisionTransformerHSI(nn.Module):
                 drop=drop_rate, attn_drop=attn_drop_rate, drop_path=drop_path_rate,
                 norm_layer=norm_layer)
             for i in range(depth)])
+        
+        print(self.vit_spatial)
         
         self.vit_spectral = nn.ModuleList([
             Block(
@@ -273,8 +275,7 @@ class VisionTransformerHSI(nn.Module):
         rand_pos_embed = get_3d_sincos_pos_embed(self.embed_dim,
                                                  self.rand_size[2] // self.patch_size[2],
                                                  self.rand_size[0] // self.patch_size[0], 
-                                                 self.rand_size[1] // self.patch_size[1], 
-                                                 cls_token=True)
+                                                 self.rand_size[1] // self.patch_size[1])
         print("rand_pos_embed", rand_pos_embed.shape)
 
 
@@ -285,8 +286,7 @@ class VisionTransformerHSI(nn.Module):
         focal_pos_embed = get_3d_sincos_pos_embed(self.embed_dim,
                                                    self.focal_size[2] // self.patch_size[2],
                                                    self.focal_size[0] // self.patch_size[0],
-                                                   self.focal_size[1] // self.patch_size[1],
-                                                   cls_token=True)
+                                                   self.focal_size[1] // self.patch_size[1])
         self.foc_pos_embed.data.copy_(focal_pos_embed)
         self.foc_pos_embed.requires_grad = False
 
@@ -405,6 +405,7 @@ class VisionTransformerHSI(nn.Module):
         x = x.reshape(N, T * L, C)
 
 
+
         
         x, mask, ids_restore, ids_keep = self.spatial_spectral_masking(x, T, L, 
                                                                        mask_ratio= mask_ratio)
@@ -414,18 +415,12 @@ class VisionTransformerHSI(nn.Module):
 
 
 
-        if  (T*L + 1) == self.rand_pos_embed.shape[1]:
-            pos_embed = self.rand_pos_embed[:, 1:, :].expand(N, -1, -1)
-            pos_embed_cls = self.rand_pos_embed[:, 0:1, :].expand(N, -1, -1)
+        if  (T*L ) == self.rand_pos_embed.shape[1]:
+            pos_embed = self.rand_pos_embed[:, :, :].expand(N, -1, -1)
 
         else:
-            pos_embed = self.foc_pos_embed[:, 1:, :].expand(N, -1, -1)  
-            pos_embed_cls = self.foc_pos_embed[:, 0:1, :].expand(N, -1, -1)
+            pos_embed = self.foc_pos_embed[:, :, :].expand(N, -1, -1)  
 
-
-        # add cls token
-        cls_token = self.cls_token.expand(N, -1, -1)
-        cls_token = cls_token + pos_embed_cls
 
         # add pos embedding nos patches
         pos_embed = torch.gather(
@@ -440,15 +435,6 @@ class VisionTransformerHSI(nn.Module):
         x_spatial = rearrange(x, 'b (t l) c -> (b t) l c', t=self.len_t, l=self.len_l)
         x_spectral = rearrange(x, 'b (t l) c -> (b l) t c', t=self.len_t, l=self.len_l)
 
-        # cls_spatial shape [B * L, 1, C]
-        cls_spatial = cls_token.repeat(self.len_t,1 , 1)
-
-        cls_spectral = cls_token.repeat( self.len_l, 1, 1)
-
-        # concatena
-        x_spatial = torch.cat((cls_spatial, x_spatial), dim=1)
-        x_spectral = torch.cat((cls_spectral, x_spectral), dim=1)
-
 
         # passa pelos blocos
         for blk in self.vit_spatial:
@@ -457,22 +443,16 @@ class VisionTransformerHSI(nn.Module):
         for blk in self.vit_spectral:
             x_spectral = blk(x_spectral)
 
-        # pega apenas o cls_token de cada ramo
-        cls_spatial = x_spatial[:, 0, :]    # (N*T, C)
-        cls_spectral = x_spectral[:, 0, :]  # (N*L, C)
 
-        # rearrange cls
-        cls_spatial = cls_spatial.view(N, self.len_t, -1)
-        cls_spectral = cls_spectral.view(N, self.len_l, -1)
+        x_spatial = rearrange(x_spatial, '(b t) l c -> b (t l) c', b=N, t=self.len_t)
+        x_spectral = rearrange(x_spectral, '(b l) t c -> b (t l) c', b=N, l=self.len_l)
 
-        cls_finals = torch.cat((cls_spatial, cls_spectral), dim=1)
-        cls_finals = self.norm(cls_finals)
+        x = x_spatial + x_spectral
 
-        cls_final = torch.mean(cls_finals, dim=1)
+        x = self.norm(x)
 
-        cls_final = self.norm(cls_final)
+        x = x.mean(dim=1)
 
+        #print(x)
 
-
-
-        return cls_final
+        return x
