@@ -6,3 +6,6 @@ hsi_airborne/
 msn/src/__pycache__/
 
 msn/output/
+msn/*.png
+
+links.txt

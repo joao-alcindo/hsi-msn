@@ -87,16 +87,16 @@ def make_transforms(params):
     rand_transform = v2.Compose([
         v2.RandomResizedCrop(params['rand_size'][:1], scale=params['rand_crop_scale']),
         v2.ToDtype(torch.float32, scale=True),
-        SpectralJitter(intensity=params['spectral_jitter_strength']),
-        RandomSimetry(),
-        Clip(),
+        #SpectralJitter(intensity=params['spectral_jitter_strength']),
+        RandomSimetry()
+        #Clip(),
     ])
     
     focal_transform = v2.Compose([
         v2.RandomResizedCrop(params['focal_size'][:1], scale=params['focal_crop_scale']),
-        v2.ToDtype(torch.float32, scale=True),
-        SpectralJitter(intensity=params['spectral_jitter_strength']),
-        Clip(),
+        v2.ToDtype(torch.float32, scale=True)
+        #SpectralJitter(intensity=params['spectral_jitter_strength']),
+        #Clip(),
     ])
     
     transform = MultiViewTransform(
@@ -160,8 +160,9 @@ class HyperspectralNPZDataset(torch.utils.data.Dataset):
         img = torch.from_numpy(img_np.astype(np.float32))
 
         # replace nan by white noise
-        img = torch.where(torch.isnan(img), 0, img)
-        
+        # img = torch.where(torch.isnan(img), torch.randn_like(img), img)
+        img = torch.nan_to_num(img, nan=0.0)
+
         timg = self.transform(img)
 
         for i in range(len(timg)):

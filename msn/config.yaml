@@ -6,7 +6,7 @@ resume_from: null # Pode ser 'last' para continuar do último checkpoint ou null
 
 # Configurações do treinamento
 num_epochs: 100
-batch_size: 32
+batch_size: 16
 learning_rate: 0.0001
 weight_decay: 0.05
 warmup_epochs: 10
@@ -14,37 +14,37 @@ final_lr: 1.0e-06
 final_weight_decay: 0.05
 alpha_ema: 0.996 # Momentum inicial para o EMA
 save_freq_epochs: 50
-epoch_stop_prototype: 50 # Epoch em que o treinamento dos protótipos é parado
+epoch_stop_prototype: 5 # Epoch em que o treinamento dos protótipos é parado
 
 # Parâmetros da perda (MSN Loss)
-use_sinkhorn: True
-temp_anchor: 0.1
-temp_target: 0.025
-lambda_reg: 0.001
+use_sinkhorn: True 
+temp_anchor: 0.05
+temp_target: 0.03
+lambda_reg: 0.01
 
 # Parâmetros do modelo (Vision Transformer HSI)
 # Tamanhos das imagens de entrada e patches
 rand_size: [20, 20, 430]
-focal_size: [12, 12, 430]
-patch_size: [4, 4, 43]
+focal_size: [15, 15, 430]
+patch_size: [5, 5, 43]
 in_chans: 1 # Número de canais de entrada (1 para HSI)
-embed_dim: 128 # Tamanho da dimensão do embedding
-depth: 1 # Número de blocos do Transformer
+embed_dim: 256 # Tamanho da dimensão do embedding
+depth: 4 # Número de blocos do Transformer
 num_heads: 8 # Número de cabeças de atenção
 mlp_ratio: 4.0
-drop_rate: 0.5
-attn_drop_rate: 0.4
-drop_path_rate: 0.01
+drop_rate: 0.0
+attn_drop_rate: 0.0
+drop_path_rate: 0.00
 trunc_init: True
 
 # Configurações específicas da MSN
-num_prototipos: 20
-mask_ratio: 0.25 # Porcentagem de patches mascarados para as visões âncora
+num_prototipos: 10
+mask_ratio: 0.5 # Porcentagem de patches mascarados para as visões âncora
 rand_views: 5 # Número de visões âncora (e.g., uma aleatória e uma focal)
-focal_views: 2 # Parâmetro adicionado para consistência com o train.py
+focal_views: 0 # Parâmetro adicionado para consistência com o train.py
 
 
-rand_crop_scale: [0.9, 1.0]
+rand_crop_scale: [1.0, 1.0]
 focal_crop_scale: [0.5, 0.6]
 num_workers: 1
 pin_memory: True

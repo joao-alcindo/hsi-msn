@@ -65,28 +65,31 @@ def msn_loss(
     Calcula a perda da MSN.
     Retorna a perda total e as perdas componentes para logging.
     """
+
     # 1. Normalização L2 das representações e protótipos
     anchor_representations = F.normalize(anchor_representations, dim=1)
     target_representation = F.normalize(target_representation, dim=1)
-    prototypes = F.normalize(prototypes, dim=0)
+    prototypes = F.normalize(prototypes, dim=1)
 
     # 2. Calcular predições do alvo (pseudo-labels) - SEM GRADIENTES
     with torch.no_grad():
-        
-        target_logits = (target_representation @ prototypes) / temp_target
+
+        target_logits = (target_representation @ prototypes.T)
+
 
         if use_sinkhorn:
-            # Aplica o algoritmo Sinkhorn-Knopp'
-            target_p = sinkhorn(target_logits)
+            # A função sinkhorn usará seu parâmetro 'epsilon' como temperatura.
+            # Você pode passar temp_target para ele se quiser controlar por fora.
+            target_p = sinkhorn(target_logits, epsilon=temp_target) # Passando temp_target explicitamente
         else:
-            # Usa softmax padrão
-            target_p = F.softmax(target_logits, dim=1)
+            # O softmax agora usa a temp_target para criar a distribuição.
+            target_p = F.softmax(target_logits / temp_target, dim=1)
 
         # Repete os alvos para corresponder ao número de visões âncora (estudante)
         target_p_repeated = target_p.repeat_interleave(num_anchor_views, dim=0)
 
     # 3. Calcular predições do estudante (âncora)
-    anchor_logits = (anchor_representations @ prototypes) / temp_anchor
+    anchor_logits = (anchor_representations @ prototypes.T) / temp_anchor
 
     # 4. Calcular a perda de entropia cruzada principal
     cross_entropy_loss = - (target_p_repeated * F.log_softmax(anchor_logits, dim=1)).sum(dim=1)

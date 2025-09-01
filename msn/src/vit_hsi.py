@@ -7,7 +7,7 @@ import torch.nn.functional as F
 from itertools import product
 import random
 
-from pos_embed import get_3d_sincos_pos_embed
+from src.pos_embed import get_3d_sincos_pos_embed
 
 
 # buscar as funcoes

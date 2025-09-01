@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 import copy
 
-from vit_hsi import VisionTransformerHSI
+from src.vit_hsi import VisionTransformerHSI
 
 
 
@@ -41,14 +41,13 @@ class MSNModel(nn.Module):
 
         # --- Protótipos ---
         # Os protótipos são uma matriz de pesos treináveis (Embedding, Num_prototipos)
-        self.prototypes = nn.Parameter(torch.randn(self.config.embed_dim, self.config.num_prototipos))
+        self.prototypes = nn.Parameter(torch.randn(self.config.num_prototipos, self.config.embed_dim))
 
         # inicializa os pesos dos protótipos
         self.initialize_weights_prototypes()
 
     def initialize_weights_prototypes(self):
-        nn.init.xavier_uniform_(self.prototypes)
-
+        nn.init.normal_(self.prototypes, mean=0.0, std=0.02)
     
 
     def forward(self, rand_views, focal_views, target_view):
