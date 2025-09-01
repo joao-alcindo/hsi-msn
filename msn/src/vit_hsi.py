@@ -251,9 +251,14 @@ class VisionTransformerHSI(nn.Module):
                 drop=drop_rate, attn_drop=attn_drop_rate, drop_path=drop_path_rate,
                 norm_layer=norm_layer)
             for i in range(depth)])
-        
-        print(self.vit_spatial)
-        
+
+        self.vit_fusion = nn.ModuleList([
+            Block(
+                dim=embed_dim, num_heads=num_heads, mlp_ratio=mlp_ratio, qkv_bias=qkv_bias,
+                drop=drop_rate, attn_drop=attn_drop_rate, drop_path=drop_path_rate,
+                norm_layer=norm_layer)
+            for i in range(3)])
+
         self.vit_spectral = nn.ModuleList([
             Block(
                 dim=embed_dim, num_heads=num_heads, mlp_ratio=mlp_ratio, qkv_bias=qkv_bias,
@@ -448,6 +453,10 @@ class VisionTransformerHSI(nn.Module):
         x_spectral = rearrange(x_spectral, '(b l) t c -> b (t l) c', b=N, l=self.len_l)
 
         x = x_spatial + x_spectral
+
+
+        for blk in self.vit_fusion:
+            x = blk(x)
 
         x = self.norm(x)
 
