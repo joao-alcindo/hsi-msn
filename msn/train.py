@@ -12,6 +12,7 @@ import logging
 import numpy as np
 import csv
 import math
+import tqdm
 
 # Adiciona o diretório 'src' ao PYTHONPATH
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), 'src')))
@@ -40,6 +41,7 @@ def train_epoch(model, train_loader, optimizer, scheduler_lr, scheduler_wd, mome
     total_steps_in_epoch = len(train_loader)
     
     for batch_idx, views in enumerate(train_loader):
+    #for batch_idx, views in enumerate(tqdm.tqdm(train_loader, desc=f"Epoch {epoch+1}/{config.num_epochs}")):
         # Move dados para o dispositivo
         views = [v.to(device) for v in views]
         
@@ -79,7 +81,10 @@ def train_epoch(model, train_loader, optimizer, scheduler_lr, scheduler_wd, mome
         optimizer.step()
         
         # Atualiza schedulers
-        scheduler_lr.step(); scheduler_wd.step()
+        scheduler_lr.step();scheduler_wd.step()
+
+        new_lr = scheduler_lr.get_last_lr()[0]
+        new_wd = optimizer.param_groups[0]['weight_decay']
         
         # Atualiza o momentum do EMA
         model.config.alpha_ema = next(momentum_scheduler)
@@ -90,8 +95,9 @@ def train_epoch(model, train_loader, optimizer, scheduler_lr, scheduler_wd, mome
         ce_loss_meter.update(cross_entropy_loss.item(), n=batch_size)
         memax_reg_meter.update(me_max_reg.item(), n=batch_size)
         proto_used_meter.update(log_dct['np'])
-        
-    return loss_meter.avg, ce_loss_meter.avg, memax_reg_meter.avg, proto_used_meter.avg
+
+        #tqdm.tqdm.write(f"Batch {batch_idx+1}/{total_steps_in_epoch}, CE loss: {ce_loss_meter.avg:.8f}, ME-MAX: {memax_reg_meter.avg:.8f}, Prototypes used: {proto_used_meter.avg:.8f}")
+    return loss_meter.avg, ce_loss_meter.avg, memax_reg_meter.avg, proto_used_meter.avg, new_lr, new_wd
 
 # --- Função Principal de Treinamento ---
 def main(config_path):
@@ -170,11 +176,9 @@ def main(config_path):
     logger.info("Iniciando o ciclo de treinamento...")
     loggers = (AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter())
     for epoch in range(start_epoch, config.num_epochs):
-        avg_total_loss, avg_ce_loss, avg_memax_reg, avg_proto_used = train_epoch(model, train_loader, optimizer, scheduler_lr, scheduler_wd, momentum_scheduler_iter, device, epoch, config, loggers)
-        
+        avg_total_loss, avg_ce_loss, avg_memax_reg, avg_proto_used, new_lr, new_wd = train_epoch(model, train_loader, optimizer, scheduler_lr, scheduler_wd, momentum_scheduler_iter, device, epoch, config, loggers)
+
         # Tarefas de final de época
-        current_lr = optimizer.param_groups[0]['lr']
-        current_wd = optimizer.param_groups[0]['weight_decay']
         current_momentum = model.config.alpha_ema
 
         logger.info(
@@ -182,8 +186,8 @@ def main(config_path):
             f"Avg Total Loss: {avg_total_loss:.4f}, "
             f"Avg CE Loss: {avg_ce_loss:.4f}, "
             f"Avg ME-MAX Reg: {avg_memax_reg:.4f}, "
-            f"LR: {current_lr:.2e}, "
-            f"WD: {current_wd:.2e}, "
+            f"LR: {new_lr:.2e}, "
+            f"WD: {new_wd:.2e}, "
             f"Momentum EMA: {current_momentum:.4f}, "
             f"Prototypes Used: {avg_proto_used:.1f}/{config.num_prototipos}"
         )
@@ -195,7 +199,7 @@ def main(config_path):
         # Salva log e checkpoints
         with open(log_file_path, 'a', newline='') as f:
             writer = csv.writer(f)
-            writer.writerow([epoch + 1, avg_total_loss, avg_ce_loss, avg_memax_reg, current_lr, current_wd, current_momentum, avg_proto_used])
+            writer.writerow([epoch + 1, avg_total_loss, avg_ce_loss, avg_memax_reg, new_lr, new_wd, current_momentum, avg_proto_used])
 
         state = {
             'epoch': epoch,

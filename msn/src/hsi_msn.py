@@ -67,10 +67,7 @@ class MSNModel(nn.Module):
         for view in focal_views:
             anchor_view = self.student_encoder(view, mask_ratio = self.mask_ratio)  # (B, Embedding)
             anchor_views.append(anchor_view)
-
-
-
-
+            
         anchor_views = torch.cat(anchor_views, dim=0)  # (B * num_anchor_views, Embedding)
 
         # --- Visão do Alvo ---

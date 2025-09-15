@@ -2,6 +2,7 @@ import os
 import torch
 import numpy as np
 from torchvision.transforms import v2
+import glob
 
 # -----------------
 # 1. Classes de Transformação
@@ -131,6 +132,8 @@ class HyperspectralImageFolder(torch.utils.data.Dataset):
         try:
             data = np.load(path)
             # Converte o array NumPy para um tensor PyTorch.
+            # remover duas camadas espectrais
+            data = data[2:, :, :]
             img = torch.from_numpy(data.astype(np.float32))
 
             
@@ -143,6 +146,8 @@ class HyperspectralImageFolder(torch.utils.data.Dataset):
     def __len__(self):
         return len(self.imgs)
     
+
+    
 class HyperspectralNPZDataset(torch.utils.data.Dataset):
     """
     Carrega todas as imagens hiperespectrais de um único arquivo .npz.
@@ -152,7 +157,20 @@ class HyperspectralNPZDataset(torch.utils.data.Dataset):
         # Carrega o arquivo .npz inteiro na memória.
         # Assume que o array de dados está sob a chave 'data'.
         data_file = np.load(npz_file)
-        self.imgs = data_file
+
+        bands_to_select = [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            105,
+            363,
+            368,
+            369
+        ]
+        self.imgs = data_file[:,bands_to_select,:,:]  # shape (N, C, H, W)
 
     def __getitem__(self, index):
         # Acessa a imagem do array já carregado
@@ -172,6 +190,46 @@ class HyperspectralNPZDataset(torch.utils.data.Dataset):
 
     def __len__(self):
         return len(self.imgs)
+    
+class Hyperspectral11k(torch.utils.data.Dataset):
+
+    """
+    Carrega todas as imagens hiperespectrais do dataset HSI-11k.
+    npy_paths = glob.glob(f"{in_directory}**/**/*DATA.npy")
+    """
+    def __init__(self, data_root, transform):
+        self.transform = transform
+
+        self.imgs = glob.glob(f"{data_root}**.npy")
+
+    def __getitem__(self, index):
+        path = self.imgs[index]
+        try:
+            data = np.load(path)
+            # Converte o array NumPy para um tensor PyTorch.
+            img = torch.from_numpy(data.astype(np.float32))
+
+            # (H, W, C) to (C, H, W)
+            img = img.permute(2, 0, 1)
+
+            # replace nan by white noise
+            # img = torch.where(torch.isnan(img), torch.randn_like(img), img)
+            img = torch.nan_to_num(img, nan=0.0)
+
+
+
+            timg = self.transform(img)
+            for i in range(len(timg)):
+                timg[i] = timg[i].unsqueeze(0)
+            return timg
+        except Exception as e:
+            print(f"Erro ao carregar imagem {path}: {e}")
+            return None
+
+    def __len__(self):
+        return len(self.imgs)
+
+
 # -----------------
 # 4. Inicialização dos dados
 # -----------------
@@ -181,12 +239,13 @@ def init_data(params):
     Função de inicialização principal. Cria o dataset e o DataLoader.
     """
     transform = make_transforms(params)
+    #dataset = Hyperspectral11k(data_root=params['data_root'], transform=transform)
     dataset = HyperspectralNPZDataset(npz_file=params['data_root'], transform=transform)
 
     data_loader = torch.utils.data.DataLoader(
         dataset,
-        shuffle=True,
-        drop_last=True,
+        shuffle=False,
+        drop_last=False,
         batch_size=params['batch_size'],
         num_workers=params['num_workers'],
         pin_memory=params['num_workers'] > 0,

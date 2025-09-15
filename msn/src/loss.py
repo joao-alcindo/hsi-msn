@@ -86,7 +86,7 @@ def msn_loss(
             target_p = F.softmax(target_logits / temp_target, dim=1)
 
         # Repete os alvos para corresponder ao número de visões âncora (estudante)
-        target_p_repeated = target_p.repeat_interleave(num_anchor_views, dim=0)
+        target_p_repeated = target_p.repeat(num_anchor_views, 1)
 
     # 3. Calcular predições do estudante (âncora)
     anchor_logits = (anchor_representations @ prototypes.T) / temp_anchor

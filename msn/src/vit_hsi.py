@@ -13,6 +13,116 @@ from src.pos_embed import get_3d_sincos_pos_embed
 # buscar as funcoes
 from einops import rearrange
 
+
+class BlockwisePatchEmbed(nn.Module):
+    """
+    Blockwise Hyperspectral Image (HSI) to Patch Embedding Layer.
+
+    This module implements a "blockwise" patching strategy inspired by the idea
+    of learning specialized embeddings for different parts of the spectrum.
+
+    Core Logic:
+    1.  The input HSI cube's spectral dimension is split into several contiguous
+        "blocks".
+    2.  A separate 3D Convolutional layer is assigned to each block.
+    3.  Each convolution processes its corresponding spectral block, creating
+        patches and embedding them in a single, efficient step. This allows the
+        model to learn different features for different spectral regions.
+    4.  The patch embeddings from all blocks are then concatenated to form the
+        final sequence of tokens for a Transformer.
+    5.  A final Layer Normalization is applied to the full sequence.
+    """
+    def __init__(self,
+                 channels = 100,
+                 patch_size=   (5, 5, 10),
+                 in_chans: int = 1,
+                 embed_dim: int = 768):
+        """
+        Args:
+            img_size (Tuple[int, int, int]): The size of the input HSI cube in
+                (Height, Width, Bands).
+            patch_size (Tuple[int, int, int]): The size of each patch in
+                (Height, Width, Bands). The number of bands in the image must
+                be divisible by the number of bands in the patch.
+            in_chans (int): The number of input channels for the HSI.
+                Typically 1 for a single HSI cube.
+            embed_dim (int): The dimensionality of the output patch embeddings.
+        """
+        super().__init__()
+        self.patch_size = patch_size
+        self.embed_dim = embed_dim
+        self.in_chans = in_chans
+
+        img_b = channels
+        patch_h, patch_w, patch_b = self.patch_size
+
+        assert img_b % patch_b == 0, \
+            f"Image bands ({img_b}) must be divisible by patch bands ({patch_b})."
+
+        self.num_blocks = img_b // patch_b
+
+        # The convolution kernel size is defined in (Bands, Height, Width)
+        # to match the PyTorch Conv3d input format (B, C, D, H, W).
+        kernel_size = (patch_b, patch_h, patch_w)
+
+        # Create a separate 3D convolution projection for each spectral block.
+        # Each convolution will process a chunk of the HSI with `patch_b` bands.
+        self.proj= nn.ModuleList([
+            nn.Conv3d(
+                in_chans,
+                embed_dim,
+                kernel_size=kernel_size,
+                stride=kernel_size
+            ) for _ in range(self.num_blocks)
+        ])
+
+        # A single Layer Normalization applied after concatenating all embeddings.
+        self.norm = nn.LayerNorm(embed_dim)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Processes the input HSI data block by block.
+
+        Args:
+            x (torch.Tensor): Input HSI tensor.
+                Shape: (B, C, T, H, W), where T is the total number of bands.
+
+        Returns:
+            torch.Tensor: The final concatenated and normalized patch embeddings.
+                          Shape: (B, N, E), where:
+                          B is the batch size.
+                          N is the total number of patches from all blocks.
+                          E is the embedding dimension.
+        """
+        # Split the input tensor into blocks along the spectral dimension (dim=2).
+        # Each chunk will have the size (B, C, patch_bands, H, W).
+        chunks = torch.chunk(x, self.num_blocks, dim=2)
+
+        block_embeddings = []
+        for i, chunk in enumerate(chunks):
+            # Apply the specific projection for this block.
+            # Input:  (B, C, patch_b, H, W)
+            # Output: (B, E, 1, H/patch_h, W/patch_w)
+            embedded_chunk = self.proj[i](chunk)
+
+            # Reshape to (B, N_spatial, E) for this block
+            # N_spatial = (H/patch_h) * (W/patch_w)
+            embedded_chunk = embedded_chunk.flatten(3)
+            embedded_chunk = torch.einsum('bcts->btsc', embedded_chunk)
+            block_embeddings.append(embedded_chunk)
+
+        # Concatenate the embeddings from all blocks along the sequence dimension.
+        embeddings = torch.cat(block_embeddings, dim=1)
+
+        # Apply final layer normalization.
+        embeddings = self.norm(embeddings)
+
+
+        self.output_size = embeddings.shape
+
+        return embeddings
+
+
 class PatchEmbed(nn.Module):
     """ HSI to Patch Embedding
     """
@@ -230,10 +340,15 @@ class VisionTransformerHSI(nn.Module):
             f"Image dimensions must be divisible by the patch size. Got image size {focal_size} and patch size {patch_size}."
 
 
-        self.patch_embed = PatchEmbed(patch_size = patch_size, 
-                                      in_chans   = in_chans, 
-                                      embed_dim  = embed_dim)
+        # self.patch_embed = BlockwisePatchEmbed(channels = rand_size[2],
+        #                                        patch_size = patch_size, 
+        #                               in_chans   = in_chans, 
+        #                               embed_dim  = embed_dim)
         
+        self.patch_embed = PatchEmbed(patch_size = patch_size,
+                                      in_chans = in_chans,
+                                      embed_dim = embed_dim)
+
         num_rand_patches = (rand_size[0] // patch_size[0]) * (rand_size[1] // patch_size[1]) * (rand_size[2] // patch_size[2])
         num_focal_patches = focal_size[0] // patch_size[0] * focal_size[1] // patch_size[1] * focal_size[2] // patch_size[2]
 
@@ -270,8 +385,8 @@ class VisionTransformerHSI(nn.Module):
 
         self.norm = norm_layer(embed_dim)
 
-        
-        
+        # get all x and return on
+
         self.initialize_weights()
 
 
@@ -297,12 +412,19 @@ class VisionTransformerHSI(nn.Module):
 
         w = self.patch_embed.proj.weight.data
 
+
         if self.trunc_init:
             torch.nn.init.trunc_normal_(w)
             torch.nn.init.trunc_normal_(self.mask_token, std=0.02)
         else:
             torch.nn.init.xavier_uniform_(w.view([w.shape[0], -1]))
             torch.nn.init.normal_(self.mask_token, std=0.02)
+
+        # initialize weights modulelist
+
+        # for proj in self.patch_embed.proj:
+        #     nn.init.xavier_uniform_(proj.weight)
+        #     nn.init.constant_(proj.bias, 0)
 
         # initialize nn.Linear and nn.LayerNorm
         self.apply(self._init_weights)
@@ -454,9 +576,22 @@ class VisionTransformerHSI(nn.Module):
 
         x = x_spatial + x_spectral
 
-
         for blk in self.vit_fusion:
             x = blk(x)
+
+
+        # x  = rearrange(x, 'b (t l) c -> (b t) l c', t=self.len_t, l=self.len_l)
+        # for blk in self.vit_spatial:
+        #      x = blk(x)
+        # x = rearrange(x, '(b t) l c -> b (t l) c', b=N, t=self.len_t)
+        # x  = rearrange(x, 'b (t l) c -> (b l) t c', t=self.len_t, l=self.len_l)
+
+        # for blk in self.vit_spatial:
+        #     x = blk(x)
+
+        # x = rearrange(x, '(b l) t c -> b (t l) c', b=N, l=self.len_l)
+
+
 
         x = self.norm(x)
 

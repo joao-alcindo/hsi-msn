@@ -9,3 +9,7 @@ msn/output/
 msn/*.png
 
 links.txt
+
+*.out
+*.log   
+
