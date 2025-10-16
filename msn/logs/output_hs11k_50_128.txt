@@ -1,0 +1,36 @@
+2025-10-14 18:59:19,869 - Configuração salva em: ./output/proto50_embed128/config.yaml
+2025-10-14 18:59:19,879 - Usando dispositivo: cuda
+2025-10-14 18:59:20,153 - Iniciando treinamento do zero.
+2025-10-14 18:59:20,153 - Iniciando o ciclo de treinamento...
+2025-10-14 19:01:59,693 - Epoch [1/20] - Avg Total Loss: 2.7150, Avg CE Loss: 3.0713, Avg ME-MAX Reg: 3.5632, LR: 1.40e-03, WD: 5.00e-02, Momentum EMA: 0.9564, Prototypes Used: 23.6/50
+2025-10-14 19:01:59,698 - Nova perda mínima encontrada! Salvando 'min_loss_checkpoint.pth'...
+2025-10-14 19:04:38,442 - Epoch [2/20] - Avg Total Loss: 1.4448, Avg CE Loss: 1.7895, Avg ME-MAX Reg: 3.4472, LR: 2.30e-03, WD: 5.00e-02, Momentum EMA: 0.9166, Prototypes Used: 28.1/50
+2025-10-14 19:04:38,447 - Nova perda mínima encontrada! Salvando 'min_loss_checkpoint.pth'...
+2025-10-14 19:07:18,086 - Epoch [3/20] - Avg Total Loss: 1.0467, Avg CE Loss: 1.3833, Avg ME-MAX Reg: 3.3656, LR: 3.20e-03, WD: 5.00e-02, Momentum EMA: 0.8768, Prototypes Used: 30.2/50
+2025-10-14 19:07:18,091 - Nova perda mínima encontrada! Salvando 'min_loss_checkpoint.pth'...
+2025-10-14 19:09:56,591 - Epoch [4/20] - Avg Total Loss: 0.8948, Avg CE Loss: 1.2331, Avg ME-MAX Reg: 3.3836, LR: 4.10e-03, WD: 5.00e-02, Momentum EMA: 0.8370, Prototypes Used: 30.4/50
+2025-10-14 19:09:56,596 - Nova perda mínima encontrada! Salvando 'min_loss_checkpoint.pth'...
+2025-10-14 19:12:35,085 - Epoch [5/20] - Avg Total Loss: 0.8198, Avg CE Loss: 1.1554, Avg ME-MAX Reg: 3.3560, LR: 5.00e-03, WD: 5.00e-02, Momentum EMA: 0.7972, Prototypes Used: 29.9/50
+2025-10-14 19:12:35,090 - Nova perda mínima encontrada! Salvando 'min_loss_checkpoint.pth'...
+2025-10-14 19:15:14,704 - Epoch [6/20] - Avg Total Loss: 0.8093, Avg CE Loss: 1.1526, Avg ME-MAX Reg: 3.4334, LR: 4.95e-03, WD: 5.00e-02, Momentum EMA: 0.7574, Prototypes Used: 31.9/50
+2025-10-14 19:15:14,709 - Nova perda mínima encontrada! Salvando 'min_loss_checkpoint.pth'...
+2025-10-14 19:17:54,300 - Epoch [7/20] - Avg Total Loss: 0.8042, Avg CE Loss: 1.1500, Avg ME-MAX Reg: 3.4580, LR: 4.78e-03, WD: 5.00e-02, Momentum EMA: 0.7176, Prototypes Used: 32.4/50
+2025-10-14 19:17:54,305 - Nova perda mínima encontrada! Salvando 'min_loss_checkpoint.pth'...
+2025-10-14 19:20:33,756 - Epoch [8/20] - Avg Total Loss: 0.7660, Avg CE Loss: 1.1162, Avg ME-MAX Reg: 3.5021, LR: 4.52e-03, WD: 5.00e-02, Momentum EMA: 0.6778, Prototypes Used: 34.0/50
+2025-10-14 19:20:33,761 - Nova perda mínima encontrada! Salvando 'min_loss_checkpoint.pth'...
+2025-10-14 19:23:13,128 - Epoch [9/20] - Avg Total Loss: 0.7949, Avg CE Loss: 1.1472, Avg ME-MAX Reg: 3.5231, LR: 4.17e-03, WD: 5.00e-02, Momentum EMA: 0.6380, Prototypes Used: 34.7/50
+2025-10-14 19:25:52,438 - Epoch [10/20] - Avg Total Loss: 0.7583, Avg CE Loss: 1.1100, Avg ME-MAX Reg: 3.5172, LR: 3.75e-03, WD: 5.00e-02, Momentum EMA: 0.5982, Prototypes Used: 34.1/50
+2025-10-14 19:25:52,444 - Nova perda mínima encontrada! Salvando 'min_loss_checkpoint.pth'...
+2025-10-14 19:28:31,556 - Epoch [11/20] - Avg Total Loss: 0.7911, Avg CE Loss: 1.1385, Avg ME-MAX Reg: 3.4740, LR: 3.27e-03, WD: 5.00e-02, Momentum EMA: 0.5584, Prototypes Used: 33.1/50
+2025-10-14 19:31:10,143 - Epoch [12/20] - Avg Total Loss: 0.8171, Avg CE Loss: 1.1663, Avg ME-MAX Reg: 3.4916, LR: 2.76e-03, WD: 5.00e-02, Momentum EMA: 0.5186, Prototypes Used: 33.1/50
+2025-10-14 19:33:49,485 - Epoch [13/20] - Avg Total Loss: 0.7797, Avg CE Loss: 1.1318, Avg ME-MAX Reg: 3.5212, LR: 2.24e-03, WD: 5.00e-02, Momentum EMA: 0.4788, Prototypes Used: 33.9/50
+2025-10-14 19:36:27,590 - Epoch [14/20] - Avg Total Loss: 0.7818, Avg CE Loss: 1.1314, Avg ME-MAX Reg: 3.4962, LR: 1.73e-03, WD: 5.00e-02, Momentum EMA: 0.4390, Prototypes Used: 33.3/50
+2025-10-14 19:39:05,885 - Epoch [15/20] - Avg Total Loss: 0.8093, Avg CE Loss: 1.1565, Avg ME-MAX Reg: 3.4727, LR: 1.25e-03, WD: 5.00e-02, Momentum EMA: 0.3992, Prototypes Used: 32.9/50
+2025-10-14 19:41:43,772 - Epoch [16/20] - Avg Total Loss: 0.7916, Avg CE Loss: 1.1415, Avg ME-MAX Reg: 3.4990, LR: 8.27e-04, WD: 5.00e-02, Momentum EMA: 0.3594, Prototypes Used: 33.3/50
+2025-10-14 19:44:22,373 - Epoch [17/20] - Avg Total Loss: 0.7983, Avg CE Loss: 1.1468, Avg ME-MAX Reg: 3.4840, LR: 4.78e-04, WD: 5.00e-02, Momentum EMA: 0.3196, Prototypes Used: 33.3/50
+2025-10-14 19:47:00,624 - Epoch [18/20] - Avg Total Loss: 0.7839, Avg CE Loss: 1.1325, Avg ME-MAX Reg: 3.4863, LR: 2.16e-04, WD: 5.00e-02, Momentum EMA: 0.2798, Prototypes Used: 33.1/50
+2025-10-14 19:49:39,093 - Epoch [19/20] - Avg Total Loss: 0.8196, Avg CE Loss: 1.1677, Avg ME-MAX Reg: 3.4814, LR: 5.47e-05, WD: 5.00e-02, Momentum EMA: 0.2400, Prototypes Used: 33.1/50
+2025-10-14 19:52:16,525 - Epoch [20/20] - Avg Total Loss: 0.8896, Avg CE Loss: 1.2392, Avg ME-MAX Reg: 3.4963, LR: 1.00e-07, WD: 5.00e-02, Momentum EMA: 0.2002, Prototypes Used: 33.1/50
+2025-10-14 19:52:16,530 - Salvando checkpoint periódico em ./output/proto50_embed128/ckpt_epoch_20.pth...
+2025-10-14 19:52:16,642 - 
+Treinamento concluído!

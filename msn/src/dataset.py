@@ -201,11 +201,18 @@ class Hyperspectral11k(torch.utils.data.Dataset):
         self.transform = transform
 
         self.imgs = glob.glob(f"{data_root}**.npy")
+        # sort the list of file paths to ensure consistent ordering
+        self.imgs = sorted(self.imgs)
+
 
     def __getitem__(self, index):
         path = self.imgs[index]
         try:
             data = np.load(path)
+
+            # data = data[self.bands_to_select, :, :]
+            
+            
             # Converte o array NumPy para um tensor PyTorch.
             img = torch.from_numpy(data.astype(np.float32))
 
@@ -239,12 +246,12 @@ def init_data(params):
     Função de inicialização principal. Cria o dataset e o DataLoader.
     """
     transform = make_transforms(params)
-    #dataset = Hyperspectral11k(data_root=params['data_root'], transform=transform)
-    dataset = HyperspectralNPZDataset(npz_file=params['data_root'], transform=transform)
+    dataset = Hyperspectral11k(data_root=params['data_root'], transform=transform)
+    #dataset = HyperspectralNPZDataset(npz_file=params['data_root'], transform=transform)
 
     data_loader = torch.utils.data.DataLoader(
         dataset,
-        shuffle=False,
+        shuffle=True,
         drop_last=False,
         batch_size=params['batch_size'],
         num_workers=params['num_workers'],

@@ -310,7 +310,7 @@ class Block(nn.Module):
         self.drop_path = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
         self.norm2 = norm_layer(dim)
         mlp_hidden_dim = int(dim * mlp_ratio)
-        self.mlp = self.mlp = SwiGLU(dim, mlp_hidden_dim, mlp_ratio, drop)
+        self.mlp =  SwiGLU(dim, mlp_hidden_dim, mlp_ratio, drop)
 
     def forward(self, x):
         x = x + self.drop_path(self.attn(self.norm1(x)))
@@ -340,14 +340,14 @@ class VisionTransformerHSI(nn.Module):
             f"Image dimensions must be divisible by the patch size. Got image size {focal_size} and patch size {patch_size}."
 
 
-        # self.patch_embed = BlockwisePatchEmbed(channels = rand_size[2],
-        #                                        patch_size = patch_size, 
-        #                               in_chans   = in_chans, 
-        #                               embed_dim  = embed_dim)
+        self.patch_embed = BlockwisePatchEmbed(channels = rand_size[2],
+                                               patch_size = patch_size, 
+                                      in_chans   = in_chans, 
+                                      embed_dim  = embed_dim)
         
-        self.patch_embed = PatchEmbed(patch_size = patch_size,
-                                      in_chans = in_chans,
-                                      embed_dim = embed_dim)
+        # self.patch_embed = PatchEmbed(patch_size = patch_size,
+        #                               in_chans = in_chans,
+        #                               embed_dim = embed_dim)
 
         num_rand_patches = (rand_size[0] // patch_size[0]) * (rand_size[1] // patch_size[1]) * (rand_size[2] // patch_size[2])
         num_focal_patches = focal_size[0] // patch_size[0] * focal_size[1] // patch_size[1] * focal_size[2] // patch_size[2]
@@ -396,7 +396,6 @@ class VisionTransformerHSI(nn.Module):
                                                  self.rand_size[2] // self.patch_size[2],
                                                  self.rand_size[0] // self.patch_size[0], 
                                                  self.rand_size[1] // self.patch_size[1])
-        print("rand_pos_embed", rand_pos_embed.shape)
 
 
         self.rand_pos_embed.data.copy_(rand_pos_embed)
@@ -410,21 +409,20 @@ class VisionTransformerHSI(nn.Module):
         self.foc_pos_embed.data.copy_(focal_pos_embed)
         self.foc_pos_embed.requires_grad = False
 
-        w = self.patch_embed.proj.weight.data
+       # w = self.patch_embed.proj.weight.data
 
-
-        if self.trunc_init:
-            torch.nn.init.trunc_normal_(w)
-            torch.nn.init.trunc_normal_(self.mask_token, std=0.02)
-        else:
-            torch.nn.init.xavier_uniform_(w.view([w.shape[0], -1]))
-            torch.nn.init.normal_(self.mask_token, std=0.02)
+        # if self.trunc_init:
+        #     torch.nn.init.trunc_normal_(w)
+        #     torch.nn.init.trunc_normal_(self.mask_token, std=0.02)
+        # else:
+        #     torch.nn.init.xavier_uniform_(w.view([w.shape[0], -1]))
+        #     torch.nn.init.normal_(self.mask_token, std=0.02)
 
         # initialize weights modulelist
 
-        # for proj in self.patch_embed.proj:
-        #     nn.init.xavier_uniform_(proj.weight)
-        #     nn.init.constant_(proj.bias, 0)
+        for proj in self.patch_embed.proj:
+            nn.init.xavier_uniform_(proj.weight)
+            nn.init.constant_(proj.bias, 0)
 
         # initialize nn.Linear and nn.LayerNorm
         self.apply(self._init_weights)
@@ -574,7 +572,7 @@ class VisionTransformerHSI(nn.Module):
         x_spatial = rearrange(x_spatial, '(b t) l c -> b (t l) c', b=N, t=self.len_t)
         x_spectral = rearrange(x_spectral, '(b l) t c -> b (t l) c', b=N, l=self.len_l)
 
-        x = x_spatial + x_spectral
+        x = x_spectral + x_spatial
 
         for blk in self.vit_fusion:
             x = blk(x)
