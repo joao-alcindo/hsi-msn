@@ -251,7 +251,7 @@ def init_data(params):
 
     data_loader = torch.utils.data.DataLoader(
         dataset,
-        shuffle=True,
+        shuffle=params['shuffle'],
         drop_last=False,
         batch_size=params['batch_size'],
         num_workers=params['num_workers'],

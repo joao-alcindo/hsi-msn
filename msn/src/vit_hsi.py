@@ -409,6 +409,9 @@ class VisionTransformerHSI(nn.Module):
         self.foc_pos_embed.data.copy_(focal_pos_embed)
         self.foc_pos_embed.requires_grad = False
 
+        self.cls_token = nn.Parameter(torch.zeros(1, 1, self.embed_dim))
+        nn.init.trunc_normal_(self.cls_token, std=0.02)
+
        # w = self.patch_embed.proj.weight.data
 
         # if self.trunc_init:
@@ -555,10 +558,12 @@ class VisionTransformerHSI(nn.Module):
         )
         x = x + pos_embed
 
+
         # ---- separa para cada ramo ----
         # rearrange patches
         x_spatial = rearrange(x, 'b (t l) c -> (b t) l c', t=self.len_t, l=self.len_l)
         x_spectral = rearrange(x, 'b (t l) c -> (b l) t c', t=self.len_t, l=self.len_l)
+
 
 
         # passa pelos blocos
@@ -569,10 +574,12 @@ class VisionTransformerHSI(nn.Module):
             x_spectral = blk(x_spectral)
 
 
+
         x_spatial = rearrange(x_spatial, '(b t) l c -> b (t l) c', b=N, t=self.len_t)
         x_spectral = rearrange(x_spectral, '(b l) t c -> b (t l) c', b=N, l=self.len_l)
 
         x = x_spectral + x_spatial
+
 
         for blk in self.vit_fusion:
             x = blk(x)
@@ -593,8 +600,73 @@ class VisionTransformerHSI(nn.Module):
 
         x = self.norm(x)
 
+        # get cls token
         x = x.mean(dim=1)
 
         #print(x)
+
+        # # 4. Preparar [CLS] token (com seu próprio pos_embed)
+        # cls_tokens = self.cls_token.expand(N, -1, -1)
+        # cls_full = cls_tokens 
+
+        # # 5. Rearranjar patches para o ramo espectral
+        # #    x tem shape (N, T*L, C)
+        # #    self.len_t deve ser T e self.len_l deve ser L
+        # x_spectral_patches = rearrange(x, 'b (t l) c -> (b l) t c', t=self.len_t, l=self.len_l)
+        # #    Shape de saída: (N*L, T, C)
+
+        # # 6. Replicar o [CLS] token para cada "fatia" espectral (L fatias)
+        # #    cls_full tem shape (N, 1, C)
+        # #    Queremos (N*L, 1, C)
+        # # Correção (substitui a linha 629)
+        # N = cls_full.shape[0] # Pega o tamanho do batch (N)
+        # # 1. Adiciona uma dimensão: (N, 1, C) -> (N, 1, 1, C)
+        # x_cls_temp = cls_full.unsqueeze(1) 
+        # # 2. Repete L vezes na nova dimensão: (N, 1, 1, C) -> (N, L, 1, C)
+        # x_cls_temp_repeated = x_cls_temp.repeat(1, self.len_l, 1, 1)
+        # # 3. Achata as dimensões N e L: (N, L, 1, C) -> (N*L, 1, C)
+        # cls_spectral_input = x_cls_temp_repeated.reshape(N * self.len_l, 1, C)
+        
+        # # 7. Concatenar [CLS] e patches para formar a entrada do ramo
+        # x_spectral_input = torch.cat((cls_spectral_input, x_spectral_patches), dim=1)
+        # #    Shape de entrada: (N*L, 1+T, C)
+
+        # # 8. Passar pelo vit_spectral
+        # #    Os blocos Transformer preservam o shape
+        # for blk in self.vit_spectral:
+        #     x_spectral_input = blk(x_spectral_input)
+        # #    Shape de saída: (N*L, 1+T, C)
+
+        # # 9. Desfazer o processo: separar [CLS] e patches
+        
+        # #    Pegar a saída do [CLS] token de cada fatia
+        # cls_output_spectral = x_spectral_input[:, 0, :] # Shape (N*L, C)
+        
+        # #    Pegar a saída dos patches
+        # patches_output_spectral = x_spectral_input[:, 1:, :] # Shape (N*L, T, C)
+
+        # # 10. Reverter o rearrange dos patches
+        # x_patches_fused = rearrange(patches_output_spectral, '(b l) t c -> b (t l) c', b=N, l=self.len_l)
+        # #    Shape (N, T*L, C)
+
+        # # 11. Agregar as L saídas do [CLS] token
+        # #     Agrupamos de volta (N, L, C) e tiramos a média na dimensão L
+        # cls_fused = cls_output_spectral.view(N, self.len_l, C).mean(dim=1, keepdim=True)
+        # #    Shape (N, 1, C)
+
+        # # 12. Concatenar [CLS] agregado e patches processados para o ramo de fusão
+        # x = torch.cat((cls_fused, x_patches_fused), dim=1)
+        # #    Shape (N, 1 + T*L, C)
+
+        # # ... (Aqui entraria o ramo espacial, se você tivesse) ...
+        # # x = x_spectral + x_spatial # SEU CÓDIGO ANTIGO
+
+        # # 13. Passar pelo vit_fusion
+        # for blk in self.vit_fusion:
+        #     x = blk(x)
+
+        # # 14. Normalizar e retornar o [CLS]
+        # x = self.norm(x)
+        # return x[:, 0] # Retorna o estado final do [CLS] token
 
         return x

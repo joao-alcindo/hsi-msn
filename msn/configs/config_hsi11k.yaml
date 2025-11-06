@@ -7,7 +7,7 @@ resume_from: null # Pode ser 'last' para continuar do último checkpoint ou null
 # Configurações do treinamento
 num_epochs: 20
 batch_size: 64
-learning_rate: 5.0e-03
+learning_rate: 1.0e-03
 weight_decay: 0.05
 warmup_epochs: 5
 final_lr: 1.0e-07
@@ -38,7 +38,7 @@ drop_path_rate: 0.00
 trunc_init: True
 
 # Configurações específicas da MSN
-num_prototipos: 50
+num_prototipos: 55
 mask_ratio: 0.5 # Porcentagem de patches mascarados para as visões âncora
 rand_views: 2 # Número de visões âncora (e.g., uma aleatória e uma focal)
 focal_views: 5 # Parâmetro adicionado para consistência com o train.py
