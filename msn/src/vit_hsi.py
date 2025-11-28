@@ -7,7 +7,7 @@ import torch.nn.functional as F
 from itertools import product
 import random
 
-from src.pos_embed import get_3d_sincos_pos_embed
+from src.pos_embed import get_3d_sincos_pos_embed, get_1d_spectral_pos_embed_from_grid
 
 
 # buscar as funcoes
@@ -340,22 +340,20 @@ class VisionTransformerHSI(nn.Module):
             f"Image dimensions must be divisible by the patch size. Got image size {focal_size} and patch size {patch_size}."
 
 
-        self.patch_embed = BlockwisePatchEmbed(channels = rand_size[2],
-                                               patch_size = patch_size, 
-                                      in_chans   = in_chans, 
-                                      embed_dim  = embed_dim)
+        # self.patch_embed = BlockwisePatchEmbed(channels = rand_size[2],
+        #                                        patch_size = patch_size, 
+        #                               in_chans   = in_chans, 
+        #                               embed_dim  = embed_dim)
         
-        # self.patch_embed = PatchEmbed(patch_size = patch_size,
-        #                               in_chans = in_chans,
-        #                               embed_dim = embed_dim)
+        self.patch_embed = PatchEmbed(patch_size = patch_size,
+                                      in_chans = in_chans,
+                                      embed_dim = embed_dim)
 
         num_rand_patches = (rand_size[0] // patch_size[0]) * (rand_size[1] // patch_size[1]) * (rand_size[2] // patch_size[2])
         num_focal_patches = focal_size[0] // patch_size[0] * focal_size[1] // patch_size[1] * focal_size[2] // patch_size[2]
 
         self.rand_pos_embed = nn.Parameter(torch.zeros(1, num_rand_patches , embed_dim))
         self.foc_pos_embed = nn.Parameter(torch.zeros(1, num_focal_patches, embed_dim))
-
-        self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
 
         self.mask_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
 
@@ -412,20 +410,20 @@ class VisionTransformerHSI(nn.Module):
         self.cls_token = nn.Parameter(torch.zeros(1, 1, self.embed_dim))
         nn.init.trunc_normal_(self.cls_token, std=0.02)
 
-       # w = self.patch_embed.proj.weight.data
+        w = self.patch_embed.proj.weight.data
 
-        # if self.trunc_init:
-        #     torch.nn.init.trunc_normal_(w)
-        #     torch.nn.init.trunc_normal_(self.mask_token, std=0.02)
-        # else:
-        #     torch.nn.init.xavier_uniform_(w.view([w.shape[0], -1]))
-        #     torch.nn.init.normal_(self.mask_token, std=0.02)
+        if self.trunc_init:
+            torch.nn.init.trunc_normal_(w)
+            torch.nn.init.trunc_normal_(self.mask_token, std=0.02)
+        else:
+            torch.nn.init.xavier_uniform_(w.view([w.shape[0], -1]))
+            torch.nn.init.normal_(self.mask_token, std=0.02)
 
         # initialize weights modulelist
 
-        for proj in self.patch_embed.proj:
-            nn.init.xavier_uniform_(proj.weight)
-            nn.init.constant_(proj.bias, 0)
+        # for proj in self.patch_embed.proj:
+        #     nn.init.xavier_uniform_(proj.weight)
+        #     nn.init.constant_(proj.bias, 0)
 
         # initialize nn.Linear and nn.LayerNorm
         self.apply(self._init_weights)
@@ -535,8 +533,7 @@ class VisionTransformerHSI(nn.Module):
 
 
         
-        x, mask, ids_restore, ids_keep = self.spatial_spectral_masking(x, T, L, 
-                                                                       mask_ratio= mask_ratio)
+        x, mask, ids_restore, ids_keep = self.spatial_spectral_masking(x, T, L, mask_ratio)
 
         x = x.view(N, -1, C)
 
@@ -585,88 +582,267 @@ class VisionTransformerHSI(nn.Module):
             x = blk(x)
 
 
-        # x  = rearrange(x, 'b (t l) c -> (b t) l c', t=self.len_t, l=self.len_l)
-        # for blk in self.vit_spatial:
-        #      x = blk(x)
-        # x = rearrange(x, '(b t) l c -> b (t l) c', b=N, t=self.len_t)
-        # x  = rearrange(x, 'b (t l) c -> (b l) t c', t=self.len_t, l=self.len_l)
-
-        # for blk in self.vit_spatial:
-        #     x = blk(x)
-
-        # x = rearrange(x, '(b l) t c -> b (t l) c', b=N, l=self.len_l)
-
-
 
         x = self.norm(x)
 
         # get cls token
         x = x.mean(dim=1)
 
-        #print(x)
+        return x
+    
 
-        # # 4. Preparar [CLS] token (com seu próprio pos_embed)
-        # cls_tokens = self.cls_token.expand(N, -1, -1)
-        # cls_full = cls_tokens 
+class VisionTransformerSpec(nn.Module):
+    """ Vision Transformer with support for patch or hybrid CNN input stage
+    """
+    def __init__(self,rand_size = (60,60,150), focal_size = (30,30,150), patch_size=(5,5,10), in_chans=1, embed_dim=768, depth=12,
+                 num_heads=12 ,mlp_ratio=4., qkv_bias=True, drop_rate=0., attn_drop_rate=0., drop_path_rate=0., trunc_init=True,
+                 norm_layer=nn.LayerNorm, **kwargs):
+        super().__init__()
+        self.embed_dim = embed_dim
+        self.depth = depth
+        self.num_heads = num_heads
 
-        # # 5. Rearranjar patches para o ramo espectral
-        # #    x tem shape (N, T*L, C)
-        # #    self.len_t deve ser T e self.len_l deve ser L
-        # x_spectral_patches = rearrange(x, 'b (t l) c -> (b l) t c', t=self.len_t, l=self.len_l)
-        # #    Shape de saída: (N*L, T, C)
+        self.rand_size = rand_size
+        self.focal_size = focal_size # Adicionado para checagem
+        self.patch_size = patch_size
 
-        # # 6. Replicar o [CLS] token para cada "fatia" espectral (L fatias)
-        # #    cls_full tem shape (N, 1, C)
-        # #    Queremos (N*L, 1, C)
-        # # Correção (substitui a linha 629)
-        # N = cls_full.shape[0] # Pega o tamanho do batch (N)
-        # # 1. Adiciona uma dimensão: (N, 1, C) -> (N, 1, 1, C)
-        # x_cls_temp = cls_full.unsqueeze(1) 
-        # # 2. Repete L vezes na nova dimensão: (N, 1, 1, C) -> (N, L, 1, C)
-        # x_cls_temp_repeated = x_cls_temp.repeat(1, self.len_l, 1, 1)
-        # # 3. Achata as dimensões N e L: (N, L, 1, C) -> (N*L, 1, C)
-        # cls_spectral_input = x_cls_temp_repeated.reshape(N * self.len_l, 1, C)
+        assert rand_size[0] % patch_size[0] == 0 and rand_size[1] % patch_size[1] == 0 and rand_size[2] % patch_size[2] == 0, \
+            f"Image dimensions must be divisible by the patch size. Got image size {rand_size} and patch size {patch_size}."
         
-        # # 7. Concatenar [CLS] e patches para formar a entrada do ramo
-        # x_spectral_input = torch.cat((cls_spectral_input, x_spectral_patches), dim=1)
-        # #    Shape de entrada: (N*L, 1+T, C)
+        # Adicionada checagem para focal_size também
+        assert focal_size[0] % patch_size[0] == 0 and focal_size[1] % patch_size[1] == 0 and focal_size[2] % patch_size[2] == 0, \
+            f"Image dimensions must be divisible by the patch size. Got image size {focal_size} and patch size {patch_size}."
 
-        # # 8. Passar pelo vit_spectral
-        # #    Os blocos Transformer preservam o shape
-        # for blk in self.vit_spectral:
-        #     x_spectral_input = blk(x_spectral_input)
-        # #    Shape de saída: (N*L, 1+T, C)
 
-        # # 9. Desfazer o processo: separar [CLS] e patches
+        # self.patch_embed = BlockwisePatchEmbed(channels = rand_size[2],
+        #                                        patch_size = patch_size, 
+        #                                         in_chans   = in_chans, 
+        #                                         embed_dim  = embed_dim)
         
-        # #    Pegar a saída do [CLS] token de cada fatia
-        # cls_output_spectral = x_spectral_input[:, 0, :] # Shape (N*L, C)
+        self.patch_embed = PatchEmbed(patch_size = patch_size,
+                                      in_chans = in_chans,
+                                      embed_dim = embed_dim)
         
-        # #    Pegar a saída dos patches
-        # patches_output_spectral = x_spectral_input[:, 1:, :] # Shape (N*L, T, C)
+        num_rand_patches = (rand_size[0] // patch_size[0]) * (rand_size[1] // patch_size[1]) * (rand_size[2] // patch_size[2])
+        num_focal_patches = focal_size[0] // patch_size[0] * focal_size[1] // patch_size[1] * focal_size[2] // patch_size[2]
 
-        # # 10. Reverter o rearrange dos patches
-        # x_patches_fused = rearrange(patches_output_spectral, '(b l) t c -> b (t l) c', b=N, l=self.len_l)
-        # #    Shape (N, T*L, C)
+        self.rand_pos_embed = nn.Parameter(torch.zeros(1, num_rand_patches , embed_dim))
+        self.foc_pos_embed = nn.Parameter(torch.zeros(1, num_focal_patches, embed_dim))
 
-        # # 11. Agregar as L saídas do [CLS] token
-        # #     Agrupamos de volta (N, L, C) e tiramos a média na dimensão L
-        # cls_fused = cls_output_spectral.view(N, self.len_l, C).mean(dim=1, keepdim=True)
-        # #    Shape (N, 1, C)
+        self.mask_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
 
-        # # 12. Concatenar [CLS] agregado e patches processados para o ramo de fusão
-        # x = torch.cat((cls_fused, x_patches_fused), dim=1)
-        # #    Shape (N, 1 + T*L, C)
+        self.spec_transformer = nn.ModuleList([
+            Block(
+                dim=embed_dim, num_heads=num_heads, mlp_ratio=mlp_ratio, qkv_bias=qkv_bias,
+                drop=drop_rate, attn_drop=attn_drop_rate, drop_path=drop_path_rate,
+                norm_layer=norm_layer)
+            for i in range(depth)])
+        
 
-        # # ... (Aqui entraria o ramo espacial, se você tivesse) ...
-        # # x = x_spectral + x_spatial # SEU CÓDIGO ANTIGO
+        self.trunc_init = trunc_init
 
-        # # 13. Passar pelo vit_fusion
-        # for blk in self.vit_fusion:
-        #     x = blk(x)
+        self.norm = norm_layer(embed_dim)
 
-        # # 14. Normalizar e retornar o [CLS]
-        # x = self.norm(x)
-        # return x[:, 0] # Retorna o estado final do [CLS] token
+        # get all x and return on
+
+        self.initialize_weights()
+
+
+    def initialize_weights(self):
+        # rand positional embedding
+        rand_pos_embed = get_1d_spectral_pos_embed_from_grid(self.embed_dim,
+                                                 self.rand_size[2] // self.patch_size[2],
+                                                 self.rand_size[0] // self.patch_size[0], 
+                                                 self.rand_size[1] // self.patch_size[1])
+
+
+        self.rand_pos_embed.data.copy_(rand_pos_embed)
+        self.rand_pos_embed.requires_grad = False
+
+        # focal positional embedding
+        focal_pos_embed = get_1d_spectral_pos_embed_from_grid(self.embed_dim,
+                                                   self.focal_size[2] // self.patch_size[2],
+                                                   self.focal_size[0] // self.patch_size[0],
+                                                   self.focal_size[1] // self.patch_size[1])
+        self.foc_pos_embed.data.copy_(focal_pos_embed)
+        self.foc_pos_embed.requires_grad = False
+
+        self.cls_token = nn.Parameter(torch.zeros(1, 1, self.embed_dim))
+        nn.init.trunc_normal_(self.cls_token, std=0.02)
+
+        w = self.patch_embed.proj.weight.data
+
+        if self.trunc_init:
+            torch.nn.init.trunc_normal_(w)
+            torch.nn.init.trunc_normal_(self.mask_token, std=0.02)
+        else:
+            torch.nn.init.xavier_uniform_(w.view([w.shape[0], -1]))
+            torch.nn.init.normal_(self.mask_token, std=0.02)
+
+        # initialize weights modulelist
+
+        # for proj in self.patch_embed.proj:
+        #     nn.init.xavier_uniform_(proj.weight.data)
+        #     if proj.bias is not None:
+        #         nn.init.constant_(proj.bias, 0)
+
+        # initialize nn.Linear and nn.LayerNorm
+        self.apply(self._init_weights)
+
+    def _init_weights(self, m):
+        if isinstance(m, nn.Linear):
+            # we use xavier_uniform following official JAX ViT:
+            if self.trunc_init:
+                nn.init.trunc_normal_(m.weight, std=0.02)
+            else:
+                torch.nn.init.xavier_uniform_(m.weight)
+            if isinstance(m, nn.Linear) and m.bias is not None:
+                nn.init.constant_(m.bias, 0)
+        elif isinstance(m, nn.LayerNorm):
+            nn.init.constant_(m.bias, 0)
+            nn.init.constant_(m.weight, 1.0)
+
+
+
+    def patchify(self, imgs):
+        N, _, T, H, W = imgs.shape
+        p = self.patch_embed.patch_size[0]
+        u = self.patch_embed.patch_size[2]
+        assert H == W and H % p == 0 and T % u == 0
+        h = w = H // p
+        t = T // u
+
+        x = imgs.reshape(shape=(N, 1, t, u, h, p, w, p))
+        x = torch.einsum("nctuhpwq->nthwupqc", x)
+        x = x.reshape(shape=(N, t * h * w, u * p**2 * 1))
+        self.patch_info = (N, T, H, W, p, u, t, h, w)
+        return x
+    
+
+    def unpatchify(self, x):
+        N, T, H, W, p, u, t, h, w = self.patch_info
+
+        x = x.reshape(shape=(N, t, h, w, u, p, p, 1))
+
+        x = torch.einsum("nthwupqc->nctuhpwq", x)
+        imgs = x.reshape(shape=(N, 1, T, H, W))
+        return imgs
+    
+    def get_dim_patches(self, T, L, mask_ratio):
+        # only spectral dim T is considered
+        len_all = torch.tensor(list(range(2, T + 1)))
+        len_keep = (1 - mask_ratio) * T * L
+        lens = len_all[:]
+        lens_diff = abs(len_keep - lens * L)
+        ind = torch.where(lens_diff == torch.min(lens_diff))[0]
+        r = torch.LongTensor(random.sample(range(len(ind)), 1))[0]
+        index = len_all[ind[r]]
+        len_t = index
+        len_l = L
+        return len_t, len_l
+
+
+
+    def spectral_only_masking(self, x, T, L, mask_ratio):
+        """
+        Mascaramento Espectral (Bandas):
+        T = Dimensão Espectral (número de bandas, ex: 4)
+        L = Dimensão Espacial (número de patches)
+        
+        Remove bandas inteiras. Se a Banda 2 for removida, ela some de todos os L patches.
+        """
+        N, _, D = x.shape
+
+        self.len_t, self.len_l = self.get_dim_patches(T, L, mask_ratio)
+
+        # 1. Calcular quantas BANDAS manter
+        # Ex: se T=4 e ratio=0.25, len_keep_t = 3 (mantém 3 bandas)
+        len_keep_t = int(T * (1 - mask_ratio))
+        
+        # O total de tokens a manter é (Bandas mantidas * Total de Patches)
+        len_keep = len_keep_t * self.len_l
+
+        # 2. Gerar ruído apenas para as bandas (N, T)
+        # Cada banda recebe um "score" de importância aleatório
+        noise = torch.rand(N, T, device=x.device)
+
+        # 3. Expandir o ruído para cobrir a dimensão espacial (L)
+        # IMPORTANTE: Depende da ordem dos seus dados em 'x'.
+        # Se x está ordenado como [B1_P1, B1_P2... B2_P1...], usamos repeat_interleave.
+        # Isso cria blocos: [ruido_b1, ruido_b1... ruido_b2, ruido_b2...]
+        noise = noise.repeat_interleave(L, dim=1)
+        
+        # 4. Ordenar (Lógica padrão de MAE)
+        # Ao ordenar o ruído expandido, todos os patches da mesma banda 
+        # ficarão juntos porque têm o mesmo valor de ruído.
+        ids_shuffle = torch.argsort(noise, dim=1) 
+        ids_restore = torch.argsort(ids_shuffle, dim=1)
+
+        # 5. Selecionar os tokens para manter
+        ids_keep = ids_shuffle[:, :len_keep]
+        
+        # Extrair os dados visíveis
+        x_masked = torch.gather(x, dim=1, index=ids_keep.unsqueeze(-1).repeat(1, 1, D))
+
+        # 6. Gerar a máscara binária (0 = keep, 1 = remove)
+        mask = torch.ones([N, T * L], device=x.device)
+        mask[:, :len_keep] = 0
+        
+        # Desembaralhar a máscara para a ordem original
+        mask = torch.gather(mask, dim=1, index=ids_restore)
+
+        return x_masked, mask, ids_restore, ids_keep
+
+
+    def forward(self, x, mask_ratio = 0.0):
+        # 1. Gerar embeddings dos patches
+        # Saída: (B, T, L, C) onde T=patches espectrais, L=patches espaciais
+        x = self.patch_embed(x) 
+        N, T, L, C = x.shape
+
+        # 2. Achatar para a sequência de tokens
+        # Forma: (B, T*L, C)
+        total_patches = T * L
+        x = x.reshape(N, total_patches, C)
+
+        # 3. Aplicar mascaramento de tokens
+        # x agora tem forma [N, len_keep, C]
+        x, mask, ids_restore, ids_keep = self.spectral_only_masking(x, T, L, mask_ratio)
+
+        x = x.view(N, -1, C)
+
+        # 4. Selecionar o embedding posicional correto
+        if total_patches == self.rand_pos_embed.shape[1]:
+            pos_embed = self.rand_pos_embed.expand(N, -1, -1)
+        elif total_patches == self.foc_pos_embed.shape[1]:
+            pos_embed = self.foc_pos_embed.expand(N, -1, -1)
+        else:
+            raise ValueError("O número total de patches não corresponde a 'rand_size' nem 'focal_size'.")
+        
+        # 5. Adicionar embedding posicional (apenas aos tokens mantidos)
+        pos_embed = torch.gather(
+            pos_embed,
+            dim=1, 
+            index=ids_keep.unsqueeze(-1).repeat(1, 1, pos_embed.shape[2])
+        )
+        x = x + pos_embed
+
+
+        # rearanjar para calcular as atenções espectrais
+        x =  rearrange(x, 'b (t l) c -> (b l) t c', t= self.len_t , l= self.len_l)
+
+
+        # 6. Aplicar os blocos Transformer
+        for blk in self.spec_transformer:
+            x = blk(x)
+
+        x = rearrange(x, '(b l) t c -> b (t l) c', b=N, l=self.len_l)
+
+        # 7. Normalização final
+        x = self.norm(x)
+
+        # 8. Pooling (média) para obter a representação final
+        # Forma: (B, C)
+        x = x.mean(dim=1)
 
         return x

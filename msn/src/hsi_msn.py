@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 import copy
 
-from src.vit_hsi import VisionTransformerHSI
+from src.vit_hsi import VisionTransformerHSI, VisionTransformerSpec
 
 
 
@@ -15,7 +15,8 @@ class MSNModel(nn.Module):
 
 
 
-        self.student_encoder = VisionTransformerHSI(rand_size= config.rand_size,
+        self.student_encoder = VisionTransformerSpec(rand_size= config.rand_size,
+        
                                                     focal_size= config.focal_size,
                                                     patch_size= config.patch_size, 
                                                     in_chans= config.in_chans, 
@@ -65,7 +66,7 @@ class MSNModel(nn.Module):
         
         # focal_views: lista de tensores (B, C, T, H, W)
         for view in focal_views:
-            anchor_view = self.student_encoder(view, mask_ratio = self.mask_ratio)  # (B, Embedding)
+            anchor_view = self.student_encoder(view, mask_ratio = 0.0)  # (B, Embedding)
             anchor_views.append(anchor_view)
             
         anchor_views = torch.cat(anchor_views, dim=0)  # (B * num_anchor_views, Embedding)

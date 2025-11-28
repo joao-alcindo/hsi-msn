@@ -6,22 +6,22 @@ data_root: "./../hsi_airborne/pca/"
 resume_from: null # Pode ser 'last' para continuar do último checkpoint ou null para começar do zero.
 
 # Configurações do treinamento
-num_epochs: 50
+num_epochs: 200
 batch_size: 512
 learning_rate: 1.0e-3
 weight_decay: 0.05
-warmup_epochs: 5
+warmup_epochs: 10
 final_lr: 1.0e-06
 final_weight_decay: 0.05
 alpha_ema: 0.996 # Momentum inicial para o EMA
 save_freq_epochs: 50
-epoch_stop_prototype: 20  # Epoch em que o treinamento dos protótipos é parado
+epoch_stop_prototype: 100  # Epoch em que o treinamento dos protótipos é parado
 
 # Parâmetros da perda (MSN Loss)
 use_sinkhorn: True 
 temp_anchor: 0.1
 temp_target: 0.025
-lambda_reg: 0.5
+lambda_reg: 1
 
 # Parâmetros do modelo (Vision Transformer HSI)
 # Tamanhos das imagens de entrada e patches
@@ -30,7 +30,7 @@ focal_size: [10, 10, 32]
 patch_size: [5, 5, 8]
 in_chans: 1 # Número de canais de entrada (1 para HSI)
 embed_dim: 32 # Tamanho da dimensão do embedding
-depth: 9 # Número de blocos do Transformer
+depth: 12 # Número de blocos do Transformer
 num_heads: 16 # Número de cabeças de atenção
 mlp_ratio: 4.0
 drop_rate: 0.0
@@ -40,14 +40,14 @@ trunc_init: True
 
 # Configurações específicas da MSN
 num_prototipos: 10
-mask_ratio: 0.5 # Porcentagem de patches mascarados para as visões âncora
+mask_ratio: 0.25 # Porcentagem de patches mascarados para as visões âncora
 rand_views: 5 # Número de visões âncora (e.g., uma aleatória e uma focal)
-focal_views: 2 # Parâmetro adicionado para consistência com o train.py
+focal_views: 5 # Parâmetro adicionado para consistência com o train.py
 
 
 rand_crop_scale: [0.8, 1.0]
 focal_crop_scale: [0.5, 0.6]
-num_workers: 1
+num_workers: 8
 pin_memory: True
 
 spectral_jitter_strength: 0.1    # Intensidade da perturbação espectral

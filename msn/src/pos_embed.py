@@ -61,6 +61,24 @@ def get_3d_sincos_pos_embed(embed_dim, t_size, h_size, w_size, cls_token=False, 
     return torch.tensor(pos_embed, dtype=torch.float, requires_grad=False).unsqueeze(0)  # (1, num_patches, D)
 
 
+def get_1d_spectral_pos_embed_from_grid(embed_dim, t_size, h_size, w_size, cls_token=False, scale_t=None):
+
+
+    # Temporal (T)
+    grid_t = np.arange(t_size, dtype=np.float32)
+    pos_embed_temporal = get_1d_sincos_pos_embed_from_grid(embed_dim, grid_t, scale=scale_t)  # (T, D)
+
+    # Expand para combinar tempo e espaço
+    pos_embed_temporal = pos_embed_temporal[:, np.newaxis, :]           # (T, 1, D)
+    pos_embed_temporal = np.tile(pos_embed_temporal, (1, h_size*w_size, 1))  # (T, H*W, D)
+
+    pos_embed = pos_embed_temporal.reshape([-1, embed_dim])  # (T*H*W, D)
+
+    if cls_token:
+        pos_embed = np.concatenate([np.zeros([1, embed_dim]), pos_embed], axis=0)
+
+    return torch.tensor(pos_embed, dtype=torch.float, requires_grad=False).unsqueeze(0)  # (1, num_patches, D)
+
 # --------------------------------------------------------
 # 2D sine-cosine position embedding
 # References:
