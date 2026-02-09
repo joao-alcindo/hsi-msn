@@ -1,0 +1,70 @@
+{
+  "model_name": "proto20_embed64_encoder_hsi_mr_50_depth12_nH16",
+  "checkpoint": "min_loss_checkpoint.pth",
+  "epoch": 84,
+  "num_samples": 1876,
+  "embed_dim": 64,
+  "num_prototypes": 20,
+  "config": {
+    "alpha_ema": 0.996,
+    "attn_drop_rate": 0.0,
+    "batch_size": 256,
+    "bwpe": false,
+    "data_root": "./../hsi_airborne/pca/",
+    "depth": 12,
+    "drop_path_rate": 0.0,
+    "drop_rate": 0.0,
+    "embed_dim": 64,
+    "encoder_type": "hsi",
+    "epoch_stop_prototype": 100,
+    "final_lr": 1e-06,
+    "final_weight_decay": 0.05,
+    "focal_crop_scale": [
+      0.5,
+      0.6
+    ],
+    "focal_size": [
+      10,
+      10,
+      32
+    ],
+    "focal_views": 5,
+    "in_chans": 1,
+    "lambda_reg": 1,
+    "learning_rate": 0.001,
+    "mask_ratio": 0.5,
+    "mlp_ratio": 4.0,
+    "num_epochs": 200,
+    "num_heads": 16,
+    "num_prototipos": 20,
+    "num_workers": 8,
+    "output_dir": "./output/proto20_embed64_encoder_hsi_mr_50_depth12_nH16",
+    "patch_size": [
+      5,
+      5,
+      8
+    ],
+    "pin_memory": true,
+    "project_name": "hsi-msn",
+    "rand_crop_scale": [
+      0.8,
+      1.0
+    ],
+    "rand_size": [
+      20,
+      20,
+      32
+    ],
+    "rand_views": 5,
+    "resume_from": null,
+    "save_freq_epochs": 50,
+    "shuffle": false,
+    "spectral_jitter_strength": 0.1,
+    "temp_anchor": 0.1,
+    "temp_target": 0.025,
+    "trunc_init": true,
+    "use_sinkhorn": true,
+    "warmup_epochs": 10,
+    "weight_decay": 0.05
+  }
+}

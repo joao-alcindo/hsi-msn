@@ -7,7 +7,7 @@ import torch.nn.functional as F
 from itertools import product
 import random
 
-from src.pos_embed import get_3d_sincos_pos_embed, get_1d_spectral_pos_embed_from_grid
+from src.pos_embed import get_3d_sincos_pos_embed, get_1d_spectral_pos_embed_from_grid, get_2d_sincos_pos_embed_for_vanilla
 
 
 # buscar as funcoes
@@ -323,12 +323,13 @@ class VisionTransformerHSI(nn.Module):
     """ Vision Transformer with support for patch or hybrid CNN input stage
     """
     def __init__(self,rand_size = (60,60,150) , focal_size = (30,30,150),patch_size=(5,5,10), in_chans=1, embed_dim=768, depth=12,
-                 num_heads=12 ,mlp_ratio=4., qkv_bias=True, drop_rate=0., attn_drop_rate=0., drop_path_rate=0., trunc_init=True,
+                 num_heads=12 ,mlp_ratio=4., qkv_bias=True, drop_rate=0., attn_drop_rate=0., drop_path_rate=0., trunc_init=True, bwpe=False,
                  norm_layer=nn.LayerNorm, **kwargs):
         super().__init__()
         self.embed_dim = embed_dim
         self.depth = depth
         self.num_heads = num_heads
+        self.bwpe = bwpe
 
         self.rand_size = rand_size
         self.focal_size = focal_size
@@ -339,15 +340,21 @@ class VisionTransformerHSI(nn.Module):
         assert focal_size[0] % patch_size[0] == 0 and focal_size[1] % patch_size[1] == 0 and focal_size[2] % patch_size[2] == 0, \
             f"Image dimensions must be divisible by the patch size. Got image size {focal_size} and patch size {patch_size}."
 
-
-        # self.patch_embed = BlockwisePatchEmbed(channels = rand_size[2],
-        #                                        patch_size = patch_size, 
-        #                               in_chans   = in_chans, 
-        #                               embed_dim  = embed_dim)
         
-        self.patch_embed = PatchEmbed(patch_size = patch_size,
-                                      in_chans = in_chans,
-                                      embed_dim = embed_dim)
+
+
+        if self.bwpe:
+            self.patch_embed = BlockwisePatchEmbed(channels = rand_size[2],
+                                                   patch_size = patch_size, 
+                                          in_chans   = in_chans, 
+                                          embed_dim  = embed_dim)
+            
+        else:
+        
+            self.patch_embed = PatchEmbed(patch_size = patch_size,
+                                          in_chans = in_chans,
+                                          embed_dim = embed_dim)
+            
 
         num_rand_patches = (rand_size[0] // patch_size[0]) * (rand_size[1] // patch_size[1]) * (rand_size[2] // patch_size[2])
         num_focal_patches = focal_size[0] // patch_size[0] * focal_size[1] // patch_size[1] * focal_size[2] // patch_size[2]
@@ -410,20 +417,20 @@ class VisionTransformerHSI(nn.Module):
         self.cls_token = nn.Parameter(torch.zeros(1, 1, self.embed_dim))
         nn.init.trunc_normal_(self.cls_token, std=0.02)
 
-        w = self.patch_embed.proj.weight.data
-
-        if self.trunc_init:
-            torch.nn.init.trunc_normal_(w)
-            torch.nn.init.trunc_normal_(self.mask_token, std=0.02)
+        if self.bwpe:
+            for proj in self.patch_embed.proj:
+                nn.init.xavier_uniform_(proj.weight)
+                nn.init.constant_(proj.bias, 0)
         else:
-            torch.nn.init.xavier_uniform_(w.view([w.shape[0], -1]))
-            torch.nn.init.normal_(self.mask_token, std=0.02)
 
-        # initialize weights modulelist
+            w = self.patch_embed.proj.weight.data
 
-        # for proj in self.patch_embed.proj:
-        #     nn.init.xavier_uniform_(proj.weight)
-        #     nn.init.constant_(proj.bias, 0)
+            if self.trunc_init:
+                torch.nn.init.trunc_normal_(w)
+                torch.nn.init.trunc_normal_(self.mask_token, std=0.02)
+            else:
+                torch.nn.init.xavier_uniform_(w.view([w.shape[0], -1]))
+                torch.nn.init.normal_(self.mask_token, std=0.02)
 
         # initialize nn.Linear and nn.LayerNorm
         self.apply(self._init_weights)
@@ -468,16 +475,32 @@ class VisionTransformerHSI(nn.Module):
         return imgs
     
     def get_dim_patches(self, T, L, mask_ratio):
-        len_all = torch.tensor(list(product(range(2, T + 1), range(2, L + 1))))
-        len_keep = (1 - mask_ratio) * T * L
-        lens = len_all[:, 0] * len_all[:, 1]
-        lens_diff = abs(len_keep - lens)
-        ind = torch.where(lens_diff == torch.min(lens_diff))[0]
-        r = torch.LongTensor(random.sample(range(len(ind)), 1))[0]
-        index = len_all[ind[r]]
-        len_t, len_l = index
-        return len_t, len_l
+        # Handle edge cases where T or L are < 2 (no valid pairs)
+        if T < 2 or L < 2:
+            len_t = 1 if T < 2 else T
+            len_l = 1 if L < 2 else L
+            return len_t, len_l
 
+        # Build explicit list of (t, l) pairs
+        pairs = [(i, j) for i in range(2, T + 1) for j in range(2, L + 1)]
+        len_all = torch.tensor(pairs, dtype=torch.long, device='cpu')
+
+        len_keep = float((1 - mask_ratio) * T * L)
+
+        # Compute product for each candidate and find closest to len_keep
+        lens = (len_all[:, 0].float() * len_all[:, 1].float())
+        lens_diff = torch.abs(lens - len_keep)
+
+        # indices where difference is minimal
+        ind = torch.where(lens_diff == torch.min(lens_diff))[0]
+        # choose randomly among ties
+        r = torch.randint(0, len(ind), (1,)).item()
+        index = len_all[ind[r]]
+
+        len_t = int(index[0].item())
+        len_l = int(index[1].item())
+        return len_t, len_l
+    
     def spatial_spectral_masking(self, x, T, L, mask_ratio):
         N, _, D = x.shape
 
@@ -524,19 +547,16 @@ class VisionTransformerHSI(nn.Module):
     def forward(self, x, mask_ratio = 0.0):
         #embed patches
         x = self.patch_embed(x) 
-        device = x.device
+
         N, T, L, C = x.shape  # T: num_patches_t, L: num_patches_l
 
 
         x = x.reshape(N, T * L, C)
 
-
-
         
         x, mask, ids_restore, ids_keep = self.spatial_spectral_masking(x, T, L, mask_ratio)
 
         x = x.view(N, -1, C)
-
 
 
 
@@ -595,16 +615,18 @@ class VisionTransformerSpec(nn.Module):
     """ Vision Transformer with support for patch or hybrid CNN input stage
     """
     def __init__(self,rand_size = (60,60,150), focal_size = (30,30,150), patch_size=(5,5,10), in_chans=1, embed_dim=768, depth=12,
-                 num_heads=12 ,mlp_ratio=4., qkv_bias=True, drop_rate=0., attn_drop_rate=0., drop_path_rate=0., trunc_init=True,
+                 num_heads=12 ,mlp_ratio=4., qkv_bias=True, drop_rate=0., attn_drop_rate=0., drop_path_rate=0., trunc_init=True, bwpe=False,
                  norm_layer=nn.LayerNorm, **kwargs):
         super().__init__()
         self.embed_dim = embed_dim
         self.depth = depth
         self.num_heads = num_heads
+        self.bwpe = bwpe
 
         self.rand_size = rand_size
         self.focal_size = focal_size # Adicionado para checagem
         self.patch_size = patch_size
+
 
         assert rand_size[0] % patch_size[0] == 0 and rand_size[1] % patch_size[1] == 0 and rand_size[2] % patch_size[2] == 0, \
             f"Image dimensions must be divisible by the patch size. Got image size {rand_size} and patch size {patch_size}."
@@ -612,16 +634,19 @@ class VisionTransformerSpec(nn.Module):
         # Adicionada checagem para focal_size também
         assert focal_size[0] % patch_size[0] == 0 and focal_size[1] % patch_size[1] == 0 and focal_size[2] % patch_size[2] == 0, \
             f"Image dimensions must be divisible by the patch size. Got image size {focal_size} and patch size {patch_size}."
-
-
-        # self.patch_embed = BlockwisePatchEmbed(channels = rand_size[2],
-        #                                        patch_size = patch_size, 
-        #                                         in_chans   = in_chans, 
-        #                                         embed_dim  = embed_dim)
         
-        self.patch_embed = PatchEmbed(patch_size = patch_size,
-                                      in_chans = in_chans,
-                                      embed_dim = embed_dim)
+
+
+        
+        if self.bwpe:
+            self.patch_embed = BlockwisePatchEmbed(channels = rand_size[2],
+                                                patch_size = patch_size, 
+                                                    in_chans   = in_chans, 
+                                                    embed_dim  = embed_dim)
+        else:
+            self.patch_embed = PatchEmbed(patch_size = patch_size,
+                                        in_chans = in_chans,
+                                        embed_dim = embed_dim)
         
         num_rand_patches = (rand_size[0] // patch_size[0]) * (rand_size[1] // patch_size[1]) * (rand_size[2] // patch_size[2])
         num_focal_patches = focal_size[0] // patch_size[0] * focal_size[1] // patch_size[1] * focal_size[2] // patch_size[2]
@@ -670,21 +695,20 @@ class VisionTransformerSpec(nn.Module):
         self.cls_token = nn.Parameter(torch.zeros(1, 1, self.embed_dim))
         nn.init.trunc_normal_(self.cls_token, std=0.02)
 
-        w = self.patch_embed.proj.weight.data
-
-        if self.trunc_init:
-            torch.nn.init.trunc_normal_(w)
-            torch.nn.init.trunc_normal_(self.mask_token, std=0.02)
+        
+        if self.bwpe:
+            for proj in self.patch_embed.proj:
+                nn.init.xavier_uniform_(proj.weight)
+                nn.init.constant_(proj.bias, 0)
         else:
-            torch.nn.init.xavier_uniform_(w.view([w.shape[0], -1]))
-            torch.nn.init.normal_(self.mask_token, std=0.02)
+            w = self.patch_embed.proj.weight.data
 
-        # initialize weights modulelist
-
-        # for proj in self.patch_embed.proj:
-        #     nn.init.xavier_uniform_(proj.weight.data)
-        #     if proj.bias is not None:
-        #         nn.init.constant_(proj.bias, 0)
+            if self.trunc_init:
+                torch.nn.init.trunc_normal_(w)
+                torch.nn.init.trunc_normal_(self.mask_token, std=0.02)
+            else:
+                torch.nn.init.xavier_uniform_(w.view([w.shape[0], -1]))
+                torch.nn.init.normal_(self.mask_token, std=0.02)
 
         # initialize nn.Linear and nn.LayerNorm
         self.apply(self._init_weights)
@@ -729,16 +753,30 @@ class VisionTransformerSpec(nn.Module):
         return imgs
     
     def get_dim_patches(self, T, L, mask_ratio):
-        # only spectral dim T is considered
-        len_all = torch.tensor(list(range(2, T + 1)))
-        len_keep = (1 - mask_ratio) * T * L
-        lens = len_all[:]
-        lens_diff = abs(len_keep - lens * L)
+        # Handle edge cases where T or L are < 2 (no valid pairs)
+        if T < 2 or L < 2:
+            len_t = 1 if T < 2 else T
+            len_l = 1 if L < 2 else L
+            return len_t, len_l
+
+        # Build explicit list of (t, l) pairs
+        pairs = [(i, j) for i in range(2, T + 1) for j in range(2, L + 1)]
+        len_all = torch.tensor(pairs, dtype=torch.long, device='cpu')
+
+        len_keep = float((1 - mask_ratio) * T * L)
+
+        # Compute product for each candidate and find closest to len_keep
+        lens = (len_all[:, 0].float() * len_all[:, 1].float())
+        lens_diff = torch.abs(lens - len_keep)
+
+        # indices where difference is minimal
         ind = torch.where(lens_diff == torch.min(lens_diff))[0]
-        r = torch.LongTensor(random.sample(range(len(ind)), 1))[0]
+        # choose randomly among ties
+        r = torch.randint(0, len(ind), (1,)).item()
         index = len_all[ind[r]]
-        len_t = index
-        len_l = L
+
+        len_t = int(index[0].item())
+        len_l = int(index[1].item())
         return len_t, len_l
 
 
@@ -846,3 +884,219 @@ class VisionTransformerSpec(nn.Module):
         x = x.mean(dim=1)
 
         return x
+
+
+class VisionTransformerVanilla(nn.Module):
+    """ Vision Transformer com mascaramento global (sem separação espacial/espectral)
+    """
+    def __init__(self,rand_size = (60,60,150), focal_size = (30,30,150), patch_size=(5,5,150), in_chans=1, embed_dim=768, depth=12,
+                 num_heads=12 ,mlp_ratio=4., qkv_bias=True, drop_rate=0., attn_drop_rate=0., drop_path_rate=0., trunc_init=True, bwpe=False,
+                 norm_layer=nn.LayerNorm, **kwargs):
+        super().__init__()
+        self.embed_dim = embed_dim
+        self.depth = depth
+        self.num_heads = num_heads
+        self.bwpe = bwpe
+
+        self.rand_size = rand_size
+        self.focal_size = focal_size # Adicionado para checagem
+        self.patch_size = patch_size
+
+        # the patch size[2] has to be the same as the number of bands in the image, otherwise the patch embedding will not work
+        assert rand_size[2] == patch_size[2], \
+            f"Number of bands in the image must be equal to the patch size in the spectral dimension. Got image bands {rand_size[2]} and patch bands {patch_size[2]}."
+
+
+        assert rand_size[0] % patch_size[0] == 0 and rand_size[1] % patch_size[1] == 0 and rand_size[2] % patch_size[2] == 0, \
+            f"Image dimensions must be divisible by the patch size. Got image size {rand_size} and patch size {patch_size}."
+        
+        assert focal_size[0] % patch_size[0] == 0 and focal_size[1] % patch_size[1] == 0 and focal_size[2] % patch_size[2] == 0, \
+            f"Image dimensions must be divisible by the patch size. Got image size {focal_size} and patch size {patch_size}."
+        
+        self.patch_embed = PatchEmbed(patch_size = patch_size,
+                                        in_chans = in_chans,
+                                        embed_dim = embed_dim)
+        
+        num_rand_patches = (rand_size[0] // patch_size[0]) * (rand_size[1] // patch_size[1]) 
+        num_focal_patches = focal_size[0] // patch_size[0] * (focal_size[1] // patch_size[1])  
+
+
+        self.rand_pos_embed = nn.Parameter(torch.zeros(1, num_rand_patches , embed_dim))
+        self.foc_pos_embed = nn.Parameter(torch.zeros(1, num_focal_patches, embed_dim))
+
+
+        self.mask_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
+
+        self.transformer_blocks = nn.ModuleList([
+            Block(
+                dim=embed_dim, num_heads=num_heads, mlp_ratio=mlp_ratio, qkv_bias=qkv_bias,
+                drop=drop_rate, attn_drop=attn_drop_rate, drop_path=drop_path_rate,
+                norm_layer=norm_layer)
+            for i in range(depth)])
+        
+        self.trunc_init = trunc_init
+
+        self.norm = norm_layer(embed_dim)
+
+        self.initialize_weights()
+
+
+    def initialize_weights(self):
+        # now i will use the 2D positional embedding for both rand and focal, since the patch size is (5,5,150) and we are treating the spectral dimension as a whole
+        rand_pos_embed = get_2d_sincos_pos_embed_for_vanilla(self.embed_dim,
+                                                 self.rand_size[0] // self.patch_size[0],
+                                                 self.rand_size[1] // self.patch_size[1])   
+        
+        self.rand_pos_embed.data.copy_(torch.from_numpy(rand_pos_embed).float())
+        self.rand_pos_embed.requires_grad = False
+
+        focal_pos_embed = get_2d_sincos_pos_embed_for_vanilla(self.embed_dim,
+                                                   self.focal_size[0] // self.patch_size[0],
+                                                   self.focal_size[1] // self.patch_size[1])
+        self.foc_pos_embed.data.copy_(torch.from_numpy(focal_pos_embed).float())
+        self.foc_pos_embed.requires_grad = False
+
+        self.cls_token = nn.Parameter(torch.zeros(1, 1, self.embed_dim))
+        nn.init.trunc_normal_(self.cls_token, std=0.02)
+
+        w = self.patch_embed.proj.weight.data
+        if self.trunc_init:
+            torch.nn.init.trunc_normal_(w)
+            torch.nn.init.trunc_normal_(self.mask_token, std=0.02)
+        else:
+            torch.nn.init.xavier_uniform_(w.view([w.shape[0], -1]))
+            torch.nn.init.normal_(self.mask_token, std=0.02)
+
+        self.apply(self._init_weights)
+
+    def _init_weights(self, m):
+        if isinstance(m, nn.Linear):
+            if self.trunc_init:
+                nn.init.trunc_normal_(m.weight, std=0.02)
+            else:
+                torch.nn.init.xavier_uniform_(m.weight)
+            if m.bias is not None:
+                nn.init.constant_(m.bias, 0)
+        elif isinstance(m, nn.LayerNorm):
+            nn.init.constant_(m.bias, 0)
+            nn.init.constant_(m.weight, 1.0)
+
+    def patchify(self, imgs):
+        #  only 2d patchify, since the patch size is (5,5,150) and we are treating the spectral dimension as a whole
+        N, _, T, H, W = imgs.shape
+        p = self.patch_embed.patch_size[0]
+        assert H == W and H % p == 0
+        h = w = H // p  
+
+        x = imgs.reshape(shape=(N, 1, T, h, p, w, p))
+        x = torch.einsum("nctuhpwq->nthwupqc", x)
+        x = x.reshape(shape=(N, T, h * w, p**2 * 1))
+        self.patch_info = (N, T, H, W, p, h, w)
+        return x
+    
+    def unpatchify(self, x):
+        N, T, H, W, p, h, w = self.patch_info
+
+        x = x.reshape(shape=(N, T, h, w, p, p, 1))
+
+        x = torch.einsum("nthwupqc->nctuhpwq", x)
+        imgs = x.reshape(shape=(N, 1, T, H, W))
+        return imgs
+    
+    def random_masking(self, x, mask_ratio):
+        """
+        Mascaramento aleatório padrão do ViT/MAE.
+        Remove uma fração aleatória de patches sem distinção espacial/espectral.
+        
+        Args:
+            x: tensor de entrada [N, L, D] onde L = número total de patches
+            mask_ratio: fração de patches a mascarar (0.0 a 1.0)
+        
+        Returns:
+            x_masked: patches visíveis [N, len_keep, D]
+            mask: máscara binária [N, L] (0 = visível, 1 = mascarado)
+            ids_restore: índices para restaurar ordem original
+            ids_keep: índices dos patches mantidos
+        """
+        N, L, D = x.shape  # batch, length, dim
+        len_keep = int(L * (1 - mask_ratio))
+        
+        # Gerar ruído aleatório para cada patch
+        noise = torch.rand(N, L, device=x.device)
+        
+        # Ordenar patches por ruído (menor ruído = mantido)
+        ids_shuffle = torch.argsort(noise, dim=1)
+        ids_restore = torch.argsort(ids_shuffle, dim=1)
+        
+        # Manter apenas os primeiros len_keep patches
+        ids_keep = ids_shuffle[:, :len_keep]
+        x_masked = torch.gather(x, dim=1, index=ids_keep.unsqueeze(-1).repeat(1, 1, D))
+        
+        # Criar máscara binária (0 = keep, 1 = remove)
+        mask = torch.ones([N, L], device=x.device)
+        mask[:, :len_keep] = 0
+        mask = torch.gather(mask, dim=1, index=ids_restore)
+        
+        return x_masked, mask, ids_restore, ids_keep
+
+    def forward(self, x, mask_ratio=0.0):
+        """
+        Forward pass do ViT vanilla com mascaramento opcional.
+        
+        Args:
+            x: tensor de entrada [B, C, T, H, W]
+            mask_ratio: razão de mascaramento (0.0 = sem mascaramento)
+        
+        Returns:
+            x: representação final [B, embed_dim]
+        """
+        # 1. Patch embedding
+        # Saída: (B, T, L, C) onde T=patches espectrais, L=patches espaciais
+        x = self.patch_embed(x)
+        N, T, L, C = x.shape
+        
+        # 2. Achatar para sequência única de tokens (tratamento 2D)
+        # Como patch_size[2] = 150 (todas as bandas), temos T=1
+        # Então a sequência é simplesmente os patches espaciais
+        total_patches = T * L
+        x = x.reshape(N, total_patches, C)
+        
+        # 3. Aplicar mascaramento aleatório (se mask_ratio > 0)
+        if mask_ratio > 0:
+            x, mask, ids_restore, ids_keep = self.random_masking(x, mask_ratio)
+        else:
+            # Sem mascaramento, todos os patches são mantidos
+            ids_keep = torch.arange(total_patches, device=x.device).unsqueeze(0).repeat(N, 1)
+        
+        # 4. Selecionar positional embedding correto
+        if total_patches == self.rand_pos_embed.shape[1]:
+            pos_embed = self.rand_pos_embed.expand(N, -1, -1)
+        elif total_patches == self.foc_pos_embed.shape[1]:
+            pos_embed = self.foc_pos_embed.expand(N, -1, -1)
+        else:
+            raise ValueError(
+                f"Número total de patches ({total_patches}) não corresponde a "
+                f"rand_size ({self.rand_pos_embed.shape[1]}) nem focal_size ({self.foc_pos_embed.shape[1]})."
+            )
+        
+        # 5. Adicionar positional embedding apenas aos patches mantidos
+        pos_embed = torch.gather(
+            pos_embed,
+            dim=1,
+            index=ids_keep.unsqueeze(-1).repeat(1, 1, pos_embed.shape[2])
+        )
+        x = x + pos_embed
+        
+        # 6. Aplicar blocos Transformer (atenção global)
+        for blk in self.transformer_blocks:
+            x = blk(x)
+        
+        # 7. Normalização final
+        x = self.norm(x)
+        
+        # 8. Global average pooling para obter representação final
+        # Forma: (B, C)
+        x = x.mean(dim=1)
+        
+        return x
+

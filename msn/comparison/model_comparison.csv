@@ -1,0 +1,6 @@
+Model,R2_mean,R2_std,R2_min,R2_max,MAE_mean,RMSE_mean
+proto20_embed64_encoder_vanilla_mr_75_depth12_nH16,0.5073,0.114,0.3731,0.6612,8.1171,11.369
+proto20_embed64_encoder_vanilla_mr_50_depth12_nH16,0.5037,0.1049,0.3762,0.6336,7.9559,11.1227
+proto20_embed64_encoder_vanilla_mr_25_depth12_nH16,0.4992,0.1076,0.3779,0.64,7.9975,11.0998
+proto20_embed64_encoder_hsi_mr_50_depth12_nH16,0.4846,0.1096,0.3303,0.6112,8.0842,11.1776
+proto20_embed64_encoder_hsi_mr_75_depth12_nH16,0.4699,0.1033,0.3275,0.6067,8.3199,11.5833

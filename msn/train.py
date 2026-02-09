@@ -113,7 +113,7 @@ def main(config_path):
     assert all(d % p == 0 for d, p in zip(config.rand_size, config.patch_size)), "rand_size must be divisible by patch_size"
     assert all(d % p == 0 for d, p in zip(config.focal_size, config.patch_size)), "focal_size must be divisible by patch_size"
 
-    run_name = f"proto{config.num_prototipos}_embed{config.embed_dim}"
+    run_name = f"proto{config.num_prototipos}_embed{config.embed_dim}_encoder_{config.encoder_type}_mr_{round(int(config.mask_ratio * 100))}_depth{config.depth}_nH{config.num_heads}"
     output_dir = os.path.join(config.output_dir, run_name)
     os.makedirs(output_dir, exist_ok=True)
     

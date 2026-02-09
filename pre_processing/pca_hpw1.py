@@ -9,11 +9,11 @@ import logging
 
 # --- Configuração Centralizada ---
 CONFIG = {
-    "input_dir": Path('./../../hyperview1/normalized_npy/'),
-    "output_dir": Path("./../../hyperview1/pca/"),
+    "input_dir": Path('./../../hyperview1/resized/'),
+    "output_dir": Path("./../../hyperview1/resized_pca/"),
     "total_pca_components": 32,
     "num_band_groups": 4,
-    "patch_dims": (150, 10, 10),  # (C, H, W)
+    "patch_dims": (150, 64, 64),  # (C, H, W)
 }
 
 # Configuração de logging para melhor feedback

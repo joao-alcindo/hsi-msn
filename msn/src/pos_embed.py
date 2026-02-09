@@ -79,6 +79,23 @@ def get_1d_spectral_pos_embed_from_grid(embed_dim, t_size, h_size, w_size, cls_t
 
     return torch.tensor(pos_embed, dtype=torch.float, requires_grad=False).unsqueeze(0)  # (1, num_patches, D)
 
+def get_2d_sincos_pos_embed_for_vanilla(embed_dim, h_size, w_size, cls_token=False):
+    """
+    Gera positional embeddings 2D para ViT vanilla (retangular).
+    
+    Args:
+        embed_dim: dimensão do embedding
+        h_size: altura da grade de patches
+        w_size: largura da grade de patches
+        cls_token: se True, adiciona uma posição para o cls token
+    
+    Returns:
+        numpy array de shape [h_size*w_size, embed_dim] ou [1+h_size*w_size, embed_dim]
+    """
+    pos_embed = get_2d_sincos_pos_embed_rect(embed_dim, h_size, w_size, cls_token=cls_token)
+    return pos_embed
+
+
 # --------------------------------------------------------
 # 2D sine-cosine position embedding
 # References:

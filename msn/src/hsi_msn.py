@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 import copy
 
-from src.vit_hsi import VisionTransformerHSI, VisionTransformerSpec
+from src.vit_hsi import VisionTransformerHSI, VisionTransformerSpec, VisionTransformerVanilla
 
 
 
@@ -13,9 +13,21 @@ class MSNModel(nn.Module):
         super().__init__()
         self.config = config
 
+        if config.encoder_type == 'hsi':
+            print("Using Vision Transformer HSI as encoder.")
+            VisionTransformer = VisionTransformerHSI
+        elif config.encoder_type == 'spec':
+            print("Using Vision Transformer Spec as encoder.")
+            VisionTransformer = VisionTransformerSpec
+        elif config.encoder_type == 'vanilla':
+            print("Using Vision Transformer Vanilla as encoder.")
+            VisionTransformer = VisionTransformerVanilla
+        else:
+            raise ValueError(f"Unknown encoder type: {config.encoder_type}")
 
 
-        self.student_encoder = VisionTransformerSpec(rand_size= config.rand_size,
+
+        self.student_encoder = VisionTransformer(rand_size= config.rand_size,
         
                                                     focal_size= config.focal_size,
                                                     patch_size= config.patch_size, 
@@ -29,6 +41,7 @@ class MSNModel(nn.Module):
                                                     attn_drop_rate= config.attn_drop_rate, 
                                                     drop_path_rate= config.drop_path_rate, 
                                                     trunc_init= config.trunc_init,
+                                                    bwpe= config.bwpe,
                                                     norm_layer=nn.LayerNorm)
         
         #-- target encoder 

@@ -7,7 +7,7 @@ resume_from: null # Pode ser 'last' para continuar do último checkpoint ou null
 
 # Configurações do treinamento
 num_epochs: 200
-batch_size: 512
+batch_size: 256
 learning_rate: 1.0e-3
 weight_decay: 0.05
 warmup_epochs: 10
@@ -29,7 +29,7 @@ rand_size: [20, 20, 32]
 focal_size: [10, 10, 32]
 patch_size: [5, 5, 8]
 in_chans: 1 # Número de canais de entrada (1 para HSI)
-embed_dim: 32 # Tamanho da dimensão do embedding
+embed_dim: 64 # Tamanho da dimensão do embedding
 depth: 12 # Número de blocos do Transformer
 num_heads: 16 # Número de cabeças de atenção
 mlp_ratio: 4.0
@@ -39,8 +39,8 @@ drop_path_rate: 0.0
 trunc_init: True
 
 # Configurações específicas da MSN
-num_prototipos: 10
-mask_ratio: 0.25 # Porcentagem de patches mascarados para as visões âncora
+num_prototipos: 20
+mask_ratio: 0.5 # Porcentagem de patches mascarados para as visões âncora
 rand_views: 5 # Número de visões âncora (e.g., uma aleatória e uma focal)
 focal_views: 5 # Parâmetro adicionado para consistência com o train.py
 
@@ -51,5 +51,8 @@ num_workers: 8
 pin_memory: True
 
 spectral_jitter_strength: 0.1    # Intensidade da perturbação espectral
+
+bwpe : False   # Usar Embedding de Patch em Blocos (Blockwise Patch Embedding)
+encoder_type: hsi  # Tipo de codificador: 'hsi' ou 'spec'
 
 shuffle: True
